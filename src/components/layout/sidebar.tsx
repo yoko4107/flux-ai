@@ -3,8 +3,10 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/brand/logo"
+import { Building2 } from "lucide-react"
 import {
   LayoutDashboard,
   FileText,
@@ -16,6 +18,7 @@ import {
   BarChart3,
   FileCheck,
   Mail,
+  Palette,
 } from "lucide-react"
 
 type NavItem = {
@@ -85,6 +88,12 @@ const navItems: NavItem[] = [
     roles: ["ADMIN"],
   },
   {
+    title: "Branding",
+    href: "/admin/branding",
+    icon: <Palette className="h-4 w-4" />,
+    roles: ["ADMIN"],
+  },
+  {
     title: "Configuration",
     href: "/admin/config",
     icon: <Settings className="h-4 w-4" />,
@@ -96,6 +105,20 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const { data: session } = useSession()
   const role = session?.user?.role
+  const [org, setOrg] = useState<{ name: string; logoUrl: string | null } | null>(null)
+
+  useEffect(() => {
+    if (!session?.user?.id) return
+    let cancelled = false
+    fetch("/api/my-organization")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.organization) return
+        setOrg({ name: data.organization.name, logoUrl: data.organization.logoUrl ?? null })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [session?.user?.id])
 
   const filteredItems = navItems.filter(
     (item) => role && item.roles.includes(role)
@@ -109,6 +132,22 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           {role?.replace("_", " ").toLowerCase()} portal
         </p>
       </div>
+      {org && (
+        <div className="px-6 py-4 border-b border-white/10 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-md bg-white/10 flex items-center justify-center overflow-hidden shrink-0">
+            {org.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={org.logoUrl} alt={org.name} className="h-full w-full object-contain" />
+            ) : (
+              <Building2 className="h-4 w-4 text-cyan-300" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/80">Workspace</p>
+            <p className="text-sm font-medium text-white truncate">{org.name}</p>
+          </div>
+        </div>
+      )}
       <nav className="flex-1 p-4 space-y-1">
         {filteredItems.map((item) => (
           <Link

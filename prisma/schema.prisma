@@ -113,6 +113,7 @@ model Organization {
   name      String
   slug      String   @unique
   industry  String?
+  logoUrl   String?
   createdAt DateTime @default(now())
   users     User[]
   invitations UserInvitation[]

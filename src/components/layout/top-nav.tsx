@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { LogOut, Menu, User as UserIcon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Building2, LogOut, Menu, User as UserIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { signOut } from "next-auth/react"
 import {
@@ -27,6 +27,21 @@ export function TopNav() {
   const { data: session } = useSession()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [org, setOrg] = useState<{ name: string; logoUrl: string | null } | null>(null)
+
+  useEffect(() => {
+    if (!session?.user?.id) return
+    let cancelled = false
+    fetch("/api/my-organization")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.organization) return
+        setOrg({ name: data.organization.name, logoUrl: data.organization.logoUrl ?? null })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [session?.user?.id])
+
   const initials = session?.user?.name
     ?.split(" ")
     .map((n) => n[0])
@@ -46,7 +61,21 @@ export function TopNav() {
           <Menu className="h-5 w-5" />
           <span className="sr-only">Open menu</span>
         </Button>
-        <div className="flex-1" />
+        <div className="flex-1 flex items-center gap-3 min-w-0">
+          {org && (
+            <div className="hidden sm:flex items-center gap-2 min-w-0">
+              <div className="h-8 w-8 rounded-md bg-slate-100 flex items-center justify-center overflow-hidden shrink-0">
+                {org.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={org.logoUrl} alt={org.name} className="h-full w-full object-contain" />
+                ) : (
+                  <Building2 className="h-4 w-4 text-slate-400" />
+                )}
+              </div>
+              <span className="text-sm font-medium text-[#0B1E3F] truncate">{org.name}</span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-4">
           <NotificationBell />
           <DropdownMenu>
