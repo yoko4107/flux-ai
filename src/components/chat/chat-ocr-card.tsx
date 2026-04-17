@@ -11,7 +11,7 @@ interface ChatOcrCardProps {
 }
 
 const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "ACCOMMODATION", "COMMUNICATION", "TRAINING", "ENTERTAINMENT", "MEETING", "EQUIPMENT", "PRINTING", "SOFTWARE", "OTHER"] as const
-const CURRENCIES = ["IDR", "USD", "SGD", "EUR", "GBP"] as const
+const CURRENCIES = ["IDR", "USD", "SGD", "EUR", "GBP", "VND", "MYR", "THB", "PHP", "JPY", "CNY", "AUD", "HKD"] as const
 
 export function ChatOcrCard({ data, onConfirm, onEdit }: ChatOcrCardProps) {
   const [editing, setEditing] = useState(false)
