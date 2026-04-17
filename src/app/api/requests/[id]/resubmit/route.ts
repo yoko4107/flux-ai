@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { sendNotification } from "@/lib/notifications"
 import { getConfig, getAllConfigs } from "@/lib/config"
-import { convertToIDR } from "@/lib/fx-rates"
+import { convert } from "@/lib/fx-rates"
+import { getOrgBaseCurrency } from "@/lib/org-currency"
 import { Category } from "@/generated/prisma"
 import { Prisma } from "@/generated/prisma"
 
@@ -105,11 +106,12 @@ export async function PATCH(
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 })
   }
 
-  // Recalculate IDR conversion
+  // Recalculate conversion to the org base currency
   const finalAmt = amount !== undefined ? Number(amount) : Number(request.amount)
   const finalCur = currency !== undefined ? currency : request.currency
-  const { amountIDR, exchangeRate: fxRate } = await convertToIDR(finalAmt, finalCur)
-  updateData.amountIDR = amountIDR
+  const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
+  const { amountBase, exchangeRate: fxRate } = await convert(finalAmt, finalCur, baseCurrency)
+  updateData.amountIDR = amountBase
   updateData.exchangeRate = fxRate
 
   // Determine resubmit behavior

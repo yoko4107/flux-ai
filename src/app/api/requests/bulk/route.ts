@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { getSubmissionMonth } from "@/lib/submission-month"
-import { convertToIDR } from "@/lib/fx-rates"
+import { convert } from "@/lib/fx-rates"
+import { getOrgBaseCurrency } from "@/lib/org-currency"
 import { Category, Prisma } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
 import { writeFile, mkdir } from "fs/promises"
@@ -253,8 +254,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Convert to IDR
-      const { amountIDR: idrAmount, exchangeRate: fxRate } = await convertToIDR(amount || 0, currency)
+      // Convert to the employee's organization base currency.
+      const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
+      const { amountBase: idrAmount, exchangeRate: fxRate } = await convert(amount || 0, currency, baseCurrency)
 
       // Create the request
       const request = await prisma.reimbursementRequest.create({

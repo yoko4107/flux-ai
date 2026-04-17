@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { rateLimit } from "@/lib/rate-limit"
+import { getOrgBaseCurrency } from "@/lib/org-currency"
 
 interface ReportRow {
   requestId: string
@@ -11,6 +12,8 @@ interface ReportRow {
   category: string
   amount: number
   currency: string
+  amountBase: number
+  exchangeRate: number
   receiptUrl: string
   submittedAt: Date | null
   approvedAt: Date | null
@@ -19,11 +22,12 @@ interface ReportRow {
   title: string
 }
 
-async function getMonthlyData(month: string): Promise<ReportRow[]> {
+async function getMonthlyData(month: string, orgId: string): Promise<ReportRow[]> {
   const requests = await prisma.reimbursementRequest.findMany({
     where: {
       status: { in: ["APPROVED", "PAID"] },
       month,
+      employee: { organizationId: orgId },
     },
     include: {
       employee: { select: { id: true, name: true, email: true, department: true } },
@@ -54,6 +58,8 @@ async function getMonthlyData(month: string): Promise<ReportRow[]> {
       category: req.category,
       amount: Number(req.amount),
       currency: req.currency,
+      amountBase: req.amountIDR ? Number(req.amountIDR) : 0,
+      exchangeRate: req.exchangeRate ? Number(req.exchangeRate) : 1,
       receiptUrl: req.receiptUrl ?? "",
       submittedAt: req.submittedAt,
       approvedAt,
@@ -69,66 +75,67 @@ function formatDate(d: Date | null): string {
   return new Date(d).toISOString().slice(0, 10)
 }
 
-function buildCsv(data: ReportRow[], month: string): string {
+function buildCsv(data: ReportRow[], month: string, baseCurrency: string): string {
   const lines: string[] = []
 
   // === SUMMARY SECTION ===
   lines.push(`REIMBURSEMENT REPORT — ${month}`)
   lines.push(`Generated: ${new Date().toISOString().slice(0, 10)}`)
+  lines.push(`Base currency: ${baseCurrency}`)
+  lines.push(`All totals below are expressed in ${baseCurrency} after FX conversion.`)
   lines.push("")
 
-  // Totals by category
-  const byCategory: Record<string, { count: number; total: number }> = {}
-  const byDepartment: Record<string, { count: number; total: number }> = {}
-  const byStatus: Record<string, { count: number; total: number }> = {}
-  const byEmployee: Record<string, { count: number; total: number }> = {}
-  let grandTotal = 0
+  const byCategory: Record<string, { count: number; totalBase: number }> = {}
+  const byDepartment: Record<string, { count: number; totalBase: number }> = {}
+  const byStatus: Record<string, { count: number; totalBase: number }> = {}
+  const byEmployee: Record<string, { count: number; totalBase: number }> = {}
+  let grandTotalBase = 0
 
   for (const r of data) {
-    grandTotal += r.amount
-    if (!byCategory[r.category]) byCategory[r.category] = { count: 0, total: 0 }
+    grandTotalBase += r.amountBase
+    if (!byCategory[r.category]) byCategory[r.category] = { count: 0, totalBase: 0 }
     byCategory[r.category].count++
-    byCategory[r.category].total += r.amount
+    byCategory[r.category].totalBase += r.amountBase
 
-    if (!byDepartment[r.department]) byDepartment[r.department] = { count: 0, total: 0 }
+    if (!byDepartment[r.department]) byDepartment[r.department] = { count: 0, totalBase: 0 }
     byDepartment[r.department].count++
-    byDepartment[r.department].total += r.amount
+    byDepartment[r.department].totalBase += r.amountBase
 
-    if (!byStatus[r.status]) byStatus[r.status] = { count: 0, total: 0 }
+    if (!byStatus[r.status]) byStatus[r.status] = { count: 0, totalBase: 0 }
     byStatus[r.status].count++
-    byStatus[r.status].total += r.amount
+    byStatus[r.status].totalBase += r.amountBase
 
-    if (!byEmployee[r.employeeName]) byEmployee[r.employeeName] = { count: 0, total: 0 }
+    if (!byEmployee[r.employeeName]) byEmployee[r.employeeName] = { count: 0, totalBase: 0 }
     byEmployee[r.employeeName].count++
-    byEmployee[r.employeeName].total += r.amount
+    byEmployee[r.employeeName].totalBase += r.amountBase
   }
 
   lines.push("SUMMARY BY CATEGORY")
-  lines.push("Category,Count,Total")
+  lines.push(`Category,Count,Total (${baseCurrency})`)
   for (const [cat, v] of Object.entries(byCategory)) {
-    lines.push(`${cat},${v.count},${v.total.toFixed(2)}`)
+    lines.push(`${cat},${v.count},${v.totalBase.toFixed(2)}`)
   }
-  lines.push(`TOTAL,${data.length},${grandTotal.toFixed(2)}`)
+  lines.push(`TOTAL,${data.length},${grandTotalBase.toFixed(2)}`)
   lines.push("")
 
   lines.push("SUMMARY BY DEPARTMENT")
-  lines.push("Department,Count,Total")
+  lines.push(`Department,Count,Total (${baseCurrency})`)
   for (const [dept, v] of Object.entries(byDepartment)) {
-    lines.push(`"${dept}",${v.count},${v.total.toFixed(2)}`)
+    lines.push(`"${dept}",${v.count},${v.totalBase.toFixed(2)}`)
   }
   lines.push("")
 
   lines.push("SUMMARY BY STATUS")
-  lines.push("Status,Count,Total")
+  lines.push(`Status,Count,Total (${baseCurrency})`)
   for (const [st, v] of Object.entries(byStatus)) {
-    lines.push(`${st},${v.count},${v.total.toFixed(2)}`)
+    lines.push(`${st},${v.count},${v.totalBase.toFixed(2)}`)
   }
   lines.push("")
 
   lines.push("SUMMARY BY EMPLOYEE")
-  lines.push("Employee,Count,Total")
-  for (const [emp, v] of Object.entries(byEmployee).sort((a, b) => b[1].total - a[1].total)) {
-    lines.push(`"${emp}",${v.count},${v.total.toFixed(2)}`)
+  lines.push(`Employee,Count,Total (${baseCurrency})`)
+  for (const [emp, v] of Object.entries(byEmployee).sort((a, b) => b[1].totalBase - a[1].totalBase)) {
+    lines.push(`"${emp}",${v.count},${v.totalBase.toFixed(2)}`)
   }
   lines.push("")
 
@@ -136,7 +143,9 @@ function buildCsv(data: ReportRow[], month: string): string {
   lines.push("DETAILED TRANSACTIONS")
   const headers = [
     "Request ID", "Title", "Employee", "Department", "Category",
-    "Amount", "Currency", "Status", "Submitted", "Approved", "Paid", "Receipt URL",
+    "Original Amount", "Original Currency", "FX Rate",
+    `Converted Amount (${baseCurrency})`, `Base Currency`,
+    "Status", "Submitted", "Approved", "Paid", "Receipt URL",
   ]
   lines.push(headers.join(","))
 
@@ -149,6 +158,9 @@ function buildCsv(data: ReportRow[], month: string): string {
       r.category,
       r.amount.toFixed(2),
       r.currency,
+      r.exchangeRate.toFixed(6),
+      r.amountBase.toFixed(2),
+      baseCurrency,
       r.status,
       formatDate(r.submittedAt),
       formatDate(r.approvedAt),
@@ -192,7 +204,9 @@ export async function POST(req: NextRequest) {
     // No body or not JSON — that's fine
   }
 
-  const data = await getMonthlyData(month)
+  const orgId = session.user.organizationId ?? "__none__"
+  const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
+  const data = await getMonthlyData(month, orgId)
 
   // Build naming: RI_Name_Month_Year (e.g. RI_Yoko_March_2026)
   const [yearStr, monthStr] = month.split("-")
@@ -220,23 +234,23 @@ export async function POST(req: NextRequest) {
   let grandTotal = 0
 
   for (const r of data) {
-    grandTotal += r.amount
+    grandTotal += r.amountBase
 
     if (!byCategory[r.category]) byCategory[r.category] = { count: 0, total: 0 }
     byCategory[r.category].count++
-    byCategory[r.category].total += r.amount
+    byCategory[r.category].total += r.amountBase
 
     if (!byDepartment[r.department]) byDepartment[r.department] = { count: 0, total: 0 }
     byDepartment[r.department].count++
-    byDepartment[r.department].total += r.amount
+    byDepartment[r.department].total += r.amountBase
 
     if (!byStatus[r.status]) byStatus[r.status] = { count: 0, total: 0 }
     byStatus[r.status].count++
-    byStatus[r.status].total += r.amount
+    byStatus[r.status].total += r.amountBase
 
     if (!byEmployee[r.employeeName]) byEmployee[r.employeeName] = { count: 0, total: 0, department: r.department }
     byEmployee[r.employeeName].count++
-    byEmployee[r.employeeName].total += r.amount
+    byEmployee[r.employeeName].total += r.amountBase
   }
 
   if (isConfigured) {
@@ -508,7 +522,7 @@ export async function POST(req: NextRequest) {
       )
     }
   } else {
-    csvData = buildCsv(data, month)
+    csvData = buildCsv(data, month, baseCurrency)
     message = `Google Sheets not configured, returning CSV. Filename: ${sheetTitle}.csv`
   }
 

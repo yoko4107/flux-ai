@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { getSubmissionMonth } from "@/lib/submission-month"
-import { convertToIDR } from "@/lib/fx-rates"
+import { convert } from "@/lib/fx-rates"
+import { getOrgBaseCurrency } from "@/lib/org-currency"
 import { Category, RequestStatus } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
 
@@ -126,9 +127,11 @@ export async function POST(req: NextRequest) {
     month,
   }
 
-  // Convert to IDR
-  const { amountIDR, exchangeRate } = await convertToIDR(Number(amount), currency)
-  createData.amountIDR = amountIDR
+  // Convert to the employee's organization base currency (defaults to IDR).
+  // amountIDR column reuses the same storage and now holds the amount in base currency.
+  const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
+  const { amountBase, exchangeRate } = await convert(Number(amount), currency, baseCurrency)
+  createData.amountIDR = amountBase
   createData.exchangeRate = exchangeRate
 
   if (status === "SUBMITTED") {

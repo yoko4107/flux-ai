@@ -165,3 +165,33 @@ export async function getExchangeRate(currencyCode: string): Promise<number> {
   const rates = await fetchRates()
   return rates[currencyCode] ?? 1
 }
+
+/**
+ * Convert an amount from one currency to another. Rates are stored as
+ * "units of IDR per 1 unit of currency", so we cross through IDR.
+ *
+ * Returns { amountBase, exchangeRate } where exchangeRate is the rate
+ * used to convert 1 unit of `from` into `to` (i.e. amountBase = amount * rate).
+ */
+export async function convert(
+  amount: number,
+  from: string,
+  to: string
+): Promise<{ amountBase: number; exchangeRate: number }> {
+  if (from === to) return { amountBase: amount, exchangeRate: 1 }
+  const rates = await fetchRates()
+  const fromToIDR = from === "IDR" ? 1 : rates[from]
+  const toToIDR = to === "IDR" ? 1 : rates[to]
+  if (!fromToIDR || !toToIDR) {
+    console.warn(`Unknown currency in conversion ${from}->${to}, treating as 1:1`)
+    return { amountBase: amount, exchangeRate: 1 }
+  }
+  const rate = fromToIDR / toToIDR // 1 `from` = rate `to`
+  // Use 2 decimals for most currencies, 0 for zero-decimal currencies like IDR/JPY
+  const decimals = to === "IDR" || to === "JPY" || to === "VND" || to === "KRW" ? 0 : 2
+  const factor = Math.pow(10, decimals)
+  return {
+    amountBase: Math.round(amount * rate * factor) / factor,
+    exchangeRate: Number(rate.toFixed(6)),
+  }
+}

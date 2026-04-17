@@ -3,7 +3,8 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { getSubmissionMonth } from "@/lib/submission-month"
-import { convertToIDR } from "@/lib/fx-rates"
+import { convert } from "@/lib/fx-rates"
+import { getOrgBaseCurrency } from "@/lib/org-currency"
 import { Category } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
 
@@ -105,8 +106,9 @@ export async function PATCH(
   {
     const finalAmount = amount ?? Number(request.amount)
     const finalCurrency = currency ?? request.currency
-    const { amountIDR, exchangeRate: fxRate } = await convertToIDR(finalAmount, finalCurrency)
-    updateData.amountIDR = amountIDR
+    const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
+    const { amountBase, exchangeRate: fxRate } = await convert(finalAmount, finalCurrency, baseCurrency)
+    updateData.amountIDR = amountBase
     updateData.exchangeRate = fxRate
   }
 

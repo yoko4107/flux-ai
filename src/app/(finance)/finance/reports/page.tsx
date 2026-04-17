@@ -33,8 +33,9 @@ interface ReportRow {
   department: string
   category: string
   amount: number
-  amountIDR: number | null
+  amountBase: number | null
   currency: string
+  exchangeRate: number | null
   receiptUrl: string | null
   submittedAt: string | null
   approvedAt: string | null
@@ -46,10 +47,11 @@ interface ReportRow {
 interface ReportData {
   data: ReportRow[]
   totalsByCategory: Record<string, number>
-  totalsByCategoryIDR: Record<string, number>
+  totalsByCategoryBase: Record<string, number>
   grandTotal: number
-  grandTotalIDR: number
+  grandTotalBase: number
   month: string
+  baseCurrency: string
 }
 
 interface SummaryNote {
@@ -143,37 +145,36 @@ export default function FinanceReportsPage() {
     (row) => statusFilter === "ALL" || row.status === statusFilter
   )
 
-  const formatIDR = (v: number) =>
-    new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(v)
+  const baseCurrency = report?.baseCurrency ?? "IDR"
+  const formatBase = (v: number) => formatCurrencyFull(v, baseCurrency)
 
-  // Compute summaries
+  // Compute summaries — totals are expressed in the org base currency so
+  // cross-currency requests add correctly.
   const summaryData = useMemo(() => {
     if (!filteredData) return null
-    const byCategory: Record<string, { count: number; total: number; totalIDR: number }> = {}
-    const byDepartment: Record<string, { count: number; total: number; totalIDR: number }> = {}
-    const byEmployee: Record<string, { count: number; total: number; totalIDR: number; dept: string }> = {}
-    const byStatus: Record<string, { count: number; total: number; totalIDR: number }> = {}
-    let grandTotal = 0
-    let grandTotalIDR = 0
+    const byCategory: Record<string, { count: number; totalBase: number }> = {}
+    const byDepartment: Record<string, { count: number; totalBase: number }> = {}
+    const byEmployee: Record<string, { count: number; totalBase: number; dept: string }> = {}
+    const byStatus: Record<string, { count: number; totalBase: number }> = {}
+    let grandTotalBase = 0
 
     for (const r of filteredData) {
-      const idr = r.amountIDR ?? 0
-      grandTotal += r.amount
-      grandTotalIDR += idr
-      if (!byCategory[r.category]) byCategory[r.category] = { count: 0, total: 0, totalIDR: 0 }
-      byCategory[r.category].count++; byCategory[r.category].total += r.amount; byCategory[r.category].totalIDR += idr
+      const base = r.amountBase ?? 0
+      grandTotalBase += base
+      if (!byCategory[r.category]) byCategory[r.category] = { count: 0, totalBase: 0 }
+      byCategory[r.category].count++; byCategory[r.category].totalBase += base
 
-      if (!byDepartment[r.department]) byDepartment[r.department] = { count: 0, total: 0, totalIDR: 0 }
-      byDepartment[r.department].count++; byDepartment[r.department].total += r.amount; byDepartment[r.department].totalIDR += idr
+      if (!byDepartment[r.department]) byDepartment[r.department] = { count: 0, totalBase: 0 }
+      byDepartment[r.department].count++; byDepartment[r.department].totalBase += base
 
-      if (!byEmployee[r.employeeName]) byEmployee[r.employeeName] = { count: 0, total: 0, totalIDR: 0, dept: r.department }
-      byEmployee[r.employeeName].count++; byEmployee[r.employeeName].total += r.amount; byEmployee[r.employeeName].totalIDR += idr
+      if (!byEmployee[r.employeeName]) byEmployee[r.employeeName] = { count: 0, totalBase: 0, dept: r.department }
+      byEmployee[r.employeeName].count++; byEmployee[r.employeeName].totalBase += base
 
-      if (!byStatus[r.status]) byStatus[r.status] = { count: 0, total: 0, totalIDR: 0 }
-      byStatus[r.status].count++; byStatus[r.status].total += r.amount; byStatus[r.status].totalIDR += idr
+      if (!byStatus[r.status]) byStatus[r.status] = { count: 0, totalBase: 0 }
+      byStatus[r.status].count++; byStatus[r.status].totalBase += base
     }
 
-    return { byCategory, byDepartment, byEmployee, byStatus, grandTotal, grandTotalIDR }
+    return { byCategory, byDepartment, byEmployee, byStatus, grandTotalBase }
   }, [filteredData])
 
   // Derive month label
@@ -245,8 +246,9 @@ export default function FinanceReportsPage() {
                     <TableHead>Department</TableHead>
                     <TableHead>Title</TableHead>
                     <TableHead>Category</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Amount (IDR)</TableHead>
+                    <TableHead className="text-right">Original</TableHead>
+                    <TableHead className="text-right">FX Rate</TableHead>
+                    <TableHead className="text-right">Converted ({baseCurrency})</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Submitted</TableHead>
                     <TableHead>Approved</TableHead>
@@ -261,7 +263,14 @@ export default function FinanceReportsPage() {
                       <TableCell className="max-w-[200px] truncate">{row.title}</TableCell>
                       <TableCell className="capitalize">{row.category.toLowerCase()}</TableCell>
                       <TableCell className="text-right font-mono">{formatCurrencyFull(row.amount, row.currency)}</TableCell>
-                      <TableCell className="text-right font-mono text-gray-600">{row.amountIDR != null ? formatIDR(row.amountIDR) : "—"}</TableCell>
+                      <TableCell className="text-right font-mono text-gray-500">
+                        {row.currency === baseCurrency
+                          ? "—"
+                          : row.exchangeRate != null
+                            ? `1 ${row.currency} = ${row.exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${baseCurrency}`
+                            : "—"}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-gray-700">{row.amountBase != null ? formatBase(row.amountBase) : "—"}</TableCell>
                       <TableCell><StatusBadge status={row.status as RequestStatus} /></TableCell>
                       <TableCell className="text-sm text-gray-500">{row.submittedAt ? format(new Date(row.submittedAt), "MMM d") : "—"}</TableCell>
                       <TableCell className="text-sm text-gray-500">{row.approvedAt ? format(new Date(row.approvedAt), "MMM d") : "—"}</TableCell>
@@ -299,30 +308,30 @@ export default function FinanceReportsPage() {
 
                 {/* By Category */}
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">By Category</h3>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    By Category <span className="text-gray-400 font-normal">(totals in {baseCurrency})</span>
+                  </h3>
                   <div className="rounded-md border overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-4 py-2 text-left font-medium text-gray-500">Category</th>
                           <th className="px-4 py-2 text-right font-medium text-gray-500"># Requests</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">Total</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">Total (IDR)</th>
+                          <th className="px-4 py-2 text-right font-medium text-gray-500">Total ({baseCurrency})</th>
                           <th className="px-4 py-2 text-right font-medium text-gray-500">% of Total</th>
                           {editingSummary && <th className="px-4 py-2 text-left font-medium text-gray-500">Notes</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {Object.entries(summaryData.byCategory)
-                          .sort((a, b) => b[1].total - a[1].total)
+                          .sort((a, b) => b[1].totalBase - a[1].totalBase)
                           .map(([cat, v]) => (
                             <tr key={cat}>
                               <td className="px-4 py-2 font-medium capitalize">{cat.toLowerCase()}</td>
                               <td className="px-4 py-2 text-right">{v.count}</td>
-                              <td className="px-4 py-2 text-right font-mono">${v.total.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right font-mono text-gray-600">{v.totalIDR > 0 ? formatIDR(v.totalIDR) : "—"}</td>
+                              <td className="px-4 py-2 text-right font-mono">{formatBase(v.totalBase)}</td>
                               <td className="px-4 py-2 text-right">
-                                {summaryData.grandTotal > 0 ? Math.round((v.total / summaryData.grandTotal) * 100) : 0}%
+                                {summaryData.grandTotalBase > 0 ? Math.round((v.totalBase / summaryData.grandTotalBase) * 100) : 0}%
                               </td>
                               {editingSummary && (
                                 <td className="px-4 py-2">
@@ -343,8 +352,7 @@ export default function FinanceReportsPage() {
                         <tr className="bg-gray-50 font-bold">
                           <td className="px-4 py-2">Total</td>
                           <td className="px-4 py-2 text-right">{filteredData.length}</td>
-                          <td className="px-4 py-2 text-right font-mono">${summaryData.grandTotal.toFixed(2)}</td>
-                          <td className="px-4 py-2 text-right font-mono">{summaryData.grandTotalIDR > 0 ? formatIDR(summaryData.grandTotalIDR) : "—"}</td>
+                          <td className="px-4 py-2 text-right font-mono">{formatBase(summaryData.grandTotalBase)}</td>
                           <td className="px-4 py-2 text-right">100%</td>
                           {editingSummary && <td />}
                         </tr>
@@ -365,26 +373,28 @@ export default function FinanceReportsPage() {
 
                 {/* By Department */}
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">By Department</h3>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    By Department <span className="text-gray-400 font-normal">(totals in {baseCurrency})</span>
+                  </h3>
                   <div className="rounded-md border overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-4 py-2 text-left font-medium text-gray-500">Department</th>
                           <th className="px-4 py-2 text-right font-medium text-gray-500"># Requests</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">Total</th>
+                          <th className="px-4 py-2 text-right font-medium text-gray-500">Total ({baseCurrency})</th>
                           <th className="px-4 py-2 text-right font-medium text-gray-500">% of Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {Object.entries(summaryData.byDepartment)
-                          .sort((a, b) => b[1].total - a[1].total)
+                          .sort((a, b) => b[1].totalBase - a[1].totalBase)
                           .map(([dept, v]) => (
                             <tr key={dept}>
                               <td className="px-4 py-2 font-medium">{dept}</td>
                               <td className="px-4 py-2 text-right">{v.count}</td>
-                              <td className="px-4 py-2 text-right font-mono">${v.total.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right">{summaryData.grandTotal > 0 ? Math.round((v.total / summaryData.grandTotal) * 100) : 0}%</td>
+                              <td className="px-4 py-2 text-right font-mono">{formatBase(v.totalBase)}</td>
+                              <td className="px-4 py-2 text-right">{summaryData.grandTotalBase > 0 ? Math.round((v.totalBase / summaryData.grandTotalBase) * 100) : 0}%</td>
                             </tr>
                           ))}
                       </tbody>
@@ -394,7 +404,9 @@ export default function FinanceReportsPage() {
 
                 {/* By Employee */}
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">By Employee (ranked by amount)</h3>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    By Employee <span className="text-gray-400 font-normal">(ranked by {baseCurrency} amount)</span>
+                  </h3>
                   <div className="rounded-md border overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
@@ -402,20 +414,20 @@ export default function FinanceReportsPage() {
                           <th className="px-4 py-2 text-left font-medium text-gray-500">Employee</th>
                           <th className="px-4 py-2 text-left font-medium text-gray-500">Department</th>
                           <th className="px-4 py-2 text-right font-medium text-gray-500"># Requests</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-500">Total</th>
+                          <th className="px-4 py-2 text-right font-medium text-gray-500">Total ({baseCurrency})</th>
                           <th className="px-4 py-2 text-right font-medium text-gray-500">Avg/Request</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
                         {Object.entries(summaryData.byEmployee)
-                          .sort((a, b) => b[1].total - a[1].total)
+                          .sort((a, b) => b[1].totalBase - a[1].totalBase)
                           .map(([emp, v]) => (
                             <tr key={emp}>
                               <td className="px-4 py-2 font-medium">{emp}</td>
                               <td className="px-4 py-2 text-gray-600">{v.dept}</td>
                               <td className="px-4 py-2 text-right">{v.count}</td>
-                              <td className="px-4 py-2 text-right font-mono">${v.total.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right font-mono">${v.count > 0 ? (v.total / v.count).toFixed(2) : "0.00"}</td>
+                              <td className="px-4 py-2 text-right font-mono">{formatBase(v.totalBase)}</td>
+                              <td className="px-4 py-2 text-right font-mono">{v.count > 0 ? formatBase(v.totalBase / v.count) : formatBase(0)}</td>
                             </tr>
                           ))}
                       </tbody>
@@ -431,7 +443,7 @@ export default function FinanceReportsPage() {
                       <div key={st} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-gray-50">
                         <StatusBadge status={st as RequestStatus} />
                         <span className="text-sm font-medium">{v.count}</span>
-                        <span className="text-xs text-gray-500">(${v.total.toFixed(2)})</span>
+                        <span className="text-xs text-gray-500">({formatBase(v.totalBase)})</span>
                       </div>
                     ))}
                   </div>
