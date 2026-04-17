@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit"
 import { getSubmissionMonth } from "@/lib/submission-month"
 import { convertToIDR } from "@/lib/fx-rates"
 import { Category, Prisma } from "@/generated/prisma"
+import { getConfig } from "@/lib/config"
 import { writeFile, mkdir } from "fs/promises"
 import path from "path"
 
@@ -284,10 +285,7 @@ export async function POST(req: NextRequest) {
 
       // Create approval steps if submitting
       if (status === "SUBMITTED") {
-        const approvalCommitteeConfig = await prisma.adminConfig.findUnique({
-          where: { key: "approvalCommittee" },
-        })
-        const committeeValue = approvalCommitteeConfig?.value as {
+        const committeeValue = (await getConfig(prisma, "approvalCommittee", session.user.organizationId)) as {
           members?: Array<{ userId: string; order: number }>
         } | null
         const members = committeeValue?.members ?? []

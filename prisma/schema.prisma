@@ -116,6 +116,7 @@ model Organization {
   createdAt DateTime @default(now())
   users     User[]
   invitations UserInvitation[]
+  configs   AdminConfig[]
 }
 
 model User {
@@ -231,13 +232,17 @@ model AuditLog {
 }
 
 model AdminConfig {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  value       Json
-  updatedAt   DateTime @updatedAt
-  updatedById String?
+  id             String   @id @default(cuid())
+  key            String
+  value          Json
+  organizationId String?
+  updatedAt      DateTime @updatedAt
+  updatedById    String?
 
-  updatedBy User? @relation(fields: [updatedById], references: [id])
+  updatedBy    User?         @relation(fields: [updatedById], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([key, organizationId])
 }
 
 model MonthlyReport {

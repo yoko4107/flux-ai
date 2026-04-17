@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       ],
     },
     include: {
-      employee: { select: { id: true, name: true, email: true } },
+      employee: { select: { id: true, name: true, email: true, organizationId: true } },
     },
   })
 
@@ -41,18 +41,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "No drafts to auto-submit", month: currentMonth })
   }
 
-  // Load approval committee config
-  const approvalCommitteeConfig = await prisma.adminConfig.findUnique({
-    where: { key: "approvalCommittee" },
-  })
-  const committeeValue = approvalCommitteeConfig?.value as {
-    members?: Array<{ userId: string; order: number }>
-  } | null
-  const members = committeeValue?.members ?? []
-
   let submitted = 0
   let skipped = 0
   const errors: string[] = []
+  const firstApproversToNotify = new Set<string>()
 
   for (const draft of drafts) {
     try {
@@ -62,6 +54,12 @@ export async function GET(req: NextRequest) {
         errors.push(`${draft.title}: amount is 0, skipped`)
         continue
       }
+
+      // Resolve org-scoped committee with fallback to global
+      const committeeValue = (await getConfig(prisma, "approvalCommittee", draft.employee.organizationId)) as {
+        members?: Array<{ userId: string; order: number }>
+      } | null
+      const members = committeeValue?.members ?? []
 
       // Update status to SUBMITTED
       await prisma.reimbursementRequest.update({
@@ -83,6 +81,8 @@ export async function GET(req: NextRequest) {
             order: m.order,
           }))
         await prisma.approvalStep.createMany({ data: stepData })
+        const first = members.slice().sort((a, b) => a.order - b.order)[0]
+        if (first) firstApproversToNotify.add(first.userId)
       }
 
       // Audit log
@@ -112,14 +112,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Notify first approver about new items
-  if (submitted > 0 && members.length > 0) {
-    const firstApprover = members.sort((a, b) => a.order - b.order)[0]
-    await sendNotification({
-      userId: firstApprover.userId,
-      type: "AUTO_SUBMIT_BATCH",
-      message: `${submitted} reimbursement requests were auto-submitted and are awaiting your review.`,
-    })
+  // Notify first approvers about new items
+  if (submitted > 0) {
+    for (const userId of firstApproversToNotify) {
+      await sendNotification({
+        userId,
+        type: "AUTO_SUBMIT_BATCH",
+        message: `${submitted} reimbursement requests were auto-submitted and are awaiting your review.`,
+      })
+    }
   }
 
   return NextResponse.json({

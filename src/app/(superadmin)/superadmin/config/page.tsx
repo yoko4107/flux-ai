@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { ChevronUp, ChevronDown, X } from "lucide-react"
+import { ChevronUp, ChevronDown, X, Globe2, Building2 } from "lucide-react"
 
 // Types
 interface UserOption {
@@ -79,10 +79,14 @@ function SectionCard({
   )
 }
 
+const GLOBAL_SCOPE = "__global__"
+
 export default function AdminConfigPage() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<UserOption[]>([])
   const [meta, setMeta] = useState<Record<string, ConfigMeta>>({})
+  const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([])
+  const [scopeOrgId, setScopeOrgId] = useState<string>(GLOBAL_SCOPE)
 
   // Approval Committee
   const [committee, setCommittee] = useState<ApprovalCommittee>({
@@ -129,15 +133,28 @@ export default function AdminConfigPage() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [configRes, usersRes] = await Promise.all([
-        fetch("/api/admin/config"),
+      const scopeParam = scopeOrgId === GLOBAL_SCOPE ? "global" : scopeOrgId
+      const [configRes, usersRes, orgsRes] = await Promise.all([
+        fetch(`/api/admin/config?organizationId=${encodeURIComponent(scopeParam)}`),
         fetch("/api/admin/users"),
+        fetch("/api/admin/organizations"),
       ])
+      if (orgsRes.ok) setOrgs(await orgsRes.json())
 
       if (configRes.ok) {
         const data: ConfigData = await configRes.json()
         setMeta(data.meta ?? {})
         const c = data.configs
+
+        // Reset to defaults before applying new scope's values
+        setCommittee({ mode: "sequential", approvers: [] })
+        setSubmissionDeadline(25)
+        setApprovalDeadline(5)
+        setMaxAmounts({ TRAVEL: 5000, MEALS: 500, SUPPLIES: 1000, OTHER: 2000 })
+        setRequireReceiptAbove(50)
+        setAllowedCategories(["TRAVEL", "MEALS", "SUPPLIES", "OTHER"])
+        setNotifChannels({ email: true, whatsapp: false, inApp: true })
+        setResubmitBehavior("reset")
 
         if (c.approvalCommittee) {
           const raw = c.approvalCommittee as Record<string, unknown>
@@ -183,17 +200,18 @@ export default function AdminConfigPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [scopeOrgId])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
   async function saveConfig(key: string, value: unknown): Promise<boolean> {
+    const organizationId = scopeOrgId === GLOBAL_SCOPE ? null : scopeOrgId
     const res = await fetch("/api/admin/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, value }),
+      body: JSON.stringify({ key, value, organizationId }),
     })
     if (res.ok) {
       const data = await res.json()
@@ -293,15 +311,58 @@ export default function AdminConfigPage() {
     setSavingResubmit(false)
   }
 
-  if (loading) {
-    return <div className="text-center py-12 text-gray-500">Loading configuration...</div>
-  }
-
   const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "ACCOMMODATION", "COMMUNICATION", "TRAINING", "ENTERTAINMENT", "MEETING", "EQUIPMENT", "PRINTING", "SOFTWARE", "OTHER"] as const
+  const isGlobal = scopeOrgId === GLOBAL_SCOPE
+  const currentOrgName = isGlobal ? "Global defaults" : (orgs.find((o) => o.id === scopeOrgId)?.name ?? "Organization")
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-bold">System Configuration</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">System Configuration</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Configuring:{" "}
+            <span className="font-medium text-gray-900">{currentOrgName}</span>
+            {!isGlobal && <span className="text-xs text-gray-400 ml-2">(falls back to global for unset keys)</span>}
+          </p>
+        </div>
+      </div>
+
+      {/* Scope selector */}
+      <Card>
+        <CardContent className="p-4">
+          <Label className="text-xs uppercase tracking-wide text-gray-500">Scope</Label>
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => setScopeOrgId(GLOBAL_SCOPE)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                isGlobal ? "bg-[#0B1E3F] text-white" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <Globe2 className="h-3.5 w-3.5" />
+              Global defaults
+            </button>
+            {orgs.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => setScopeOrgId(o.id)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-colors ${
+                  scopeOrgId === o.id ? "bg-cyan-500 text-white" : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                {o.name}
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {loading && <div className="text-center py-6 text-gray-500 text-sm">Loading configuration...</div>}
+      {!loading && (<>
+
 
       {/* 1. Approval Committee */}
       <SectionCard
@@ -583,6 +644,7 @@ export default function AdminConfigPage() {
           </label>
         </div>
       </SectionCard>
+      </>)}
     </div>
   )
 }

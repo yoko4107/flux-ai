@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit"
 import { getSubmissionMonth } from "@/lib/submission-month"
 import { convertToIDR } from "@/lib/fx-rates"
 import { Category } from "@/generated/prisma"
+import { getConfig } from "@/lib/config"
 
 export async function GET(
   _req: NextRequest,
@@ -192,10 +193,7 @@ export async function PATCH(
     })
 
     // Create approval steps
-    const approvalCommitteeConfig = await prisma.adminConfig.findUnique({
-      where: { key: "approvalCommittee" },
-    })
-    const committeeValue = approvalCommitteeConfig?.value as {
+    const committeeValue = (await getConfig(prisma, "approvalCommittee", session.user.organizationId)) as {
       mode?: string
       members?: Array<{ userId: string; order: number }>
     } | null
