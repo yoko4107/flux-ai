@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +8,262 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  EMPLOYEE
+  APPROVER
+  FINANCE
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CHANGE_REQUESTED
+  PAID
+}
+
+enum Category {
+  TRAVEL
+  MEALS
+  SUPPLIES
+  ACCOMMODATION
+  COMMUNICATION
+  TRAINING
+  ENTERTAINMENT
+  MEETING
+  EQUIPMENT
+  PRINTING
+  SOFTWARE
+  OTHER
+}
+
+enum ApprovalStepStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGE_REQUESTED
+}
+
+enum ChangeRequestStatus {
+  OPEN
+  RESOLVED
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+  IN_APP
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  industry  String?
+  createdAt DateTime @default(now())
+  users     User[]
+  invitations UserInvitation[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(EMPLOYEE)
+  department    String?
+  managerId     String?
+  createdAt     DateTime  @default(now())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  status        UserStatus @default(PENDING)
+  nationalIdUrl String?
+  selfieUrl     String?
+  kycVerified   Boolean    @default(false)
+  notificationPrefs Json?
+  invitations   UserInvitation[] @relation("InvitedBy")
+
+  manager              User?                  @relation("ManagerSubordinates", fields: [managerId], references: [id])
+  subordinates         User[]                 @relation("ManagerSubordinates")
+  accounts             Account[]
+  sessions             Session[]
+  requests             ReimbursementRequest[] @relation("EmployeeRequests")
+  approvalSteps        ApprovalStep[]
+  changeRequestsRaised ChangeRequest[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+  monthlyReports       MonthlyReport[]
+  configUpdates        AdminConfig[]
+}
+
+model ReimbursementRequest {
+  id          String        @id @default(cuid())
+  employeeId  String
+  title       String
+  description String?       @db.Text
+  amount      Decimal       @db.Decimal(12, 2)
+  currency    String        @default("IDR")
+  amountIDR   Decimal?      @db.Decimal(15, 2) // converted amount in Indonesian Rupiah
+  exchangeRate Decimal?     @db.Decimal(15, 6) // FX rate used: 1 unit of currency = X IDR
+  category    Category
+  receiptUrl  String?
+  receiptRaw  String?       @db.Text
+  parsedData  Json?
+  status      RequestStatus @default(DRAFT)
+  submittedAt DateTime?
+  month       String? // YYYY-MM
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  employee       User           @relation("EmployeeRequests", fields: [employeeId], references: [id])
+  approvalSteps  ApprovalStep[]
+  changeRequests ChangeRequest[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+}
+
+model ApprovalStep {
+  id         String             @id @default(cuid())
+  requestId  String
+  approverId String
+  order      Int
+  status     ApprovalStepStatus @default(PENDING)
+  comment    String?            @db.Text
+  decidedAt  DateTime?
+  createdAt  DateTime           @default(now())
+
+  request  ReimbursementRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver User                 @relation(fields: [approverId], references: [id])
+}
+
+model ChangeRequest {
+  id          String              @id @default(cuid())
+  requestId   String
+  raisedById  String
+  raisedByRole Role
+  message     String              @db.Text
+  status      ChangeRequestStatus @default(OPEN)
+  resolvedAt  DateTime?
+  createdAt   DateTime            @default(now())
+
+  request   ReimbursementRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  raisedBy  User                 @relation(fields: [raisedById], references: [id])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  requestId String?
+  type      String
+  message   String              @db.Text
+  read      Boolean             @default(false)
+  channel   NotificationChannel @default(IN_APP)
+  sentAt    DateTime            @default(now())
+
+  user    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  request ReimbursementRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  requestId String?
+  actorId   String
+  action    String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  request ReimbursementRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  actor   User                  @relation(fields: [actorId], references: [id])
+}
+
+model AdminConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+
+  updatedBy User? @relation(fields: [updatedById], references: [id])
+}
+
+model MonthlyReport {
+  id            String   @id @default(cuid())
+  month         String   @unique // YYYY-MM
+  generatedById String
+  sheetUrl      String?
+  generatedAt   DateTime @default(now())
+
+  generatedBy User @relation(fields: [generatedById], references: [id])
+}
+
+model UserInvitation {
+  id          String       @id @default(cuid())
+  email       String
+  phone       String?
+  role        Role         @default(EMPLOYEE)
+  orgId       String?
+  token       String       @unique @default(cuid())
+  otp         String?
+  otpExpiresAt DateTime?
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime
+  sentAt      DateTime     @default(now())
+  acceptedAt  DateTime?
+  invitedById String
+  invitedBy   User         @relation("InvitedBy", fields: [invitedById], references: [id])
+  organization Organization? @relation(fields: [orgId], references: [id])
 }

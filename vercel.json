@@ -1,0 +1,20 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/escalate",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/digest-approver",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/digest-finance",
+      "schedule": "0 8 * * 1"
+    },
+    {
+      "path": "/api/cron/auto-submit",
+      "schedule": "0 18 20 * *"
+    }
+  ]
+}
