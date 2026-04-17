@@ -63,16 +63,22 @@ export function TopNav() {
         </Button>
         <div className="flex-1 flex items-center gap-3 min-w-0">
           {org && (
-            <div className="hidden sm:flex items-center gap-2 min-w-0">
-              <div className="h-8 w-8 rounded-md bg-slate-100 flex items-center justify-center overflow-hidden shrink-0">
-                {org.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={org.logoUrl} alt={org.name} className="h-full w-full object-contain" />
-                ) : (
-                  <Building2 className="h-4 w-4 text-slate-400" />
-                )}
-              </div>
-              <span className="text-sm font-medium text-[#0B1E3F] truncate">{org.name}</span>
+            <div className="hidden sm:flex items-center min-w-0" title={org.name}>
+              {org.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={org.logoUrl}
+                  alt={org.name}
+                  className="h-8 max-h-8 w-auto max-w-[180px] object-contain"
+                />
+              ) : (
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="h-8 w-8 rounded-md bg-slate-100 flex items-center justify-center shrink-0">
+                    <Building2 className="h-4 w-4 text-slate-400" />
+                  </div>
+                  <span className="text-sm font-medium text-[#0B1E3F] truncate">{org.name}</span>
+                </div>
+              )}
             </div>
           )}
         </div>

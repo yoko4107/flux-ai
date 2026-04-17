@@ -133,19 +133,25 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </p>
       </div>
       {org && (
-        <div className="px-6 py-4 border-b border-white/10 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-md bg-white/10 flex items-center justify-center overflow-hidden shrink-0">
-            {org.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={org.logoUrl} alt={org.name} className="h-full w-full object-contain" />
-            ) : (
-              <Building2 className="h-4 w-4 text-cyan-300" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/80">Workspace</p>
-            <p className="text-sm font-medium text-white truncate">{org.name}</p>
-          </div>
+        <div className="px-6 py-4 border-b border-white/10" title={org.name}>
+          <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/80 mb-2">Workspace</p>
+          {org.logoUrl ? (
+            <div className="bg-white/10 rounded-md px-3 py-2 flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={org.logoUrl}
+                alt={org.name}
+                className="h-9 max-h-9 w-auto max-w-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-md bg-white/10 flex items-center justify-center shrink-0">
+                <Building2 className="h-4 w-4 text-cyan-300" />
+              </div>
+              <p className="text-sm font-medium text-white truncate">{org.name}</p>
+            </div>
+          )}
         </div>
       )}
       <nav className="flex-1 p-4 space-y-1">
