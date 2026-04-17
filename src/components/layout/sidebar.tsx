@@ -136,12 +136,12 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <div className="px-6 py-4 border-b border-white/10" title={org.name}>
           <p className="text-[10px] uppercase tracking-[0.2em] text-cyan-300/80 mb-2">Workspace</p>
           {org.logoUrl ? (
-            <div className="bg-white/10 rounded-md px-3 py-2 flex items-center justify-center">
+            <div className="bg-white rounded-md px-3 py-2 flex items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={org.logoUrl}
                 alt={org.name}
-                className="h-9 max-h-9 w-auto max-w-full object-contain"
+                className="h-10 max-h-10 w-auto max-w-full object-contain"
               />
             </div>
           ) : (
