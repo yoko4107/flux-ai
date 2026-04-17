@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
   const org = await prisma.organization.findUnique({
     where: { id: scope.orgId },
-    select: { id: true, name: true, slug: true, industry: true, logoUrl: true },
+    select: { id: true, name: true, slug: true, industry: true, logoUrl: true, baseCurrency: true },
   })
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 })
   return NextResponse.json({ organization: org })
@@ -52,6 +52,7 @@ export async function PUT(request: Request) {
     name: z.string().min(1).max(120).optional(),
     industry: z.string().max(120).nullable().optional(),
     logoUrl: z.string().nullable().optional(),
+    baseCurrency: z.string().regex(/^[A-Z]{3}$/, "Must be a 3-letter ISO currency code").optional(),
   }).safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: "Invalid body", details: parsed.error.issues }, { status: 400 })
 
@@ -61,15 +62,16 @@ export async function PUT(request: Request) {
   const existing = await prisma.organization.findUnique({ where: { id: scope.orgId } })
   if (!existing) return NextResponse.json({ error: "Organization not found" }, { status: 404 })
 
-  const data: { name?: string; industry?: string | null; logoUrl?: string | null } = {}
+  const data: { name?: string; industry?: string | null; logoUrl?: string | null; baseCurrency?: string } = {}
   if (parsed.data.name !== undefined) data.name = parsed.data.name
   if (parsed.data.industry !== undefined) data.industry = parsed.data.industry
   if (parsed.data.logoUrl !== undefined) data.logoUrl = parsed.data.logoUrl
+  if (parsed.data.baseCurrency !== undefined) data.baseCurrency = parsed.data.baseCurrency
 
   const updated = await prisma.organization.update({
     where: { id: scope.orgId },
     data,
-    select: { id: true, name: true, slug: true, industry: true, logoUrl: true },
+    select: { id: true, name: true, slug: true, industry: true, logoUrl: true, baseCurrency: true },
   })
 
   await writeAuditLog(prisma, {
@@ -78,7 +80,7 @@ export async function PUT(request: Request) {
     details: {
       organizationId: scope.orgId,
       changes: data,
-      previous: { name: existing.name, industry: existing.industry, logoUrl: existing.logoUrl },
+      previous: { name: existing.name, industry: existing.industry, logoUrl: existing.logoUrl, baseCurrency: existing.baseCurrency },
     },
   })
 

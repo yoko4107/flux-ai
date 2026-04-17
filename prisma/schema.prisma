@@ -114,6 +114,7 @@ model Organization {
   slug      String   @unique
   industry  String?
   logoUrl   String?
+  baseCurrency String @default("IDR")
   createdAt DateTime @default(now())
   users     User[]
   invitations UserInvitation[]

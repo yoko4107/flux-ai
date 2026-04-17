@@ -14,7 +14,26 @@ interface Organization {
   slug: string
   industry: string | null
   logoUrl: string | null
+  baseCurrency: string
 }
+
+const CURRENCY_OPTIONS = [
+  { code: "IDR", label: "Indonesian Rupiah (IDR, Rp)" },
+  { code: "USD", label: "US Dollar (USD, $)" },
+  { code: "EUR", label: "Euro (EUR, €)" },
+  { code: "SGD", label: "Singapore Dollar (SGD, S$)" },
+  { code: "MYR", label: "Malaysian Ringgit (MYR, RM)" },
+  { code: "THB", label: "Thai Baht (THB, ฿)" },
+  { code: "PHP", label: "Philippine Peso (PHP, ₱)" },
+  { code: "VND", label: "Vietnamese Dong (VND, ₫)" },
+  { code: "GBP", label: "Pound Sterling (GBP, £)" },
+  { code: "AUD", label: "Australian Dollar (AUD, A$)" },
+  { code: "JPY", label: "Japanese Yen (JPY, ¥)" },
+  { code: "CNY", label: "Chinese Yuan (CNY, ¥)" },
+  { code: "INR", label: "Indian Rupee (INR, ₹)" },
+  { code: "HKD", label: "Hong Kong Dollar (HKD, HK$)" },
+  { code: "KRW", label: "South Korean Won (KRW, ₩)" },
+]
 
 export default function AdminBrandingPage() {
   const [org, setOrg] = useState<Organization | null>(null)
@@ -23,6 +42,7 @@ export default function AdminBrandingPage() {
   const [uploading, setUploading] = useState(false)
   const [name, setName] = useState("")
   const [industry, setIndustry] = useState("")
+  const [baseCurrency, setBaseCurrency] = useState("IDR")
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -38,6 +58,7 @@ export default function AdminBrandingPage() {
       setOrg(organization)
       setName(organization.name ?? "")
       setIndustry(organization.industry ?? "")
+      setBaseCurrency(organization.baseCurrency ?? "IDR")
       setLogoUrl(organization.logoUrl ?? null)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load organization")
@@ -78,6 +99,7 @@ export default function AdminBrandingPage() {
           name: name.trim() || org?.name,
           industry: industry.trim() || null,
           logoUrl,
+          baseCurrency,
         }),
       })
       const data = await res.json()
@@ -120,6 +142,22 @@ export default function AdminBrandingPage() {
           <div className="space-y-2">
             <Label htmlFor="name">Company name</Label>
             <Input id="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="baseCurrency">Base currency</Label>
+            <select
+              id="baseCurrency"
+              value={baseCurrency}
+              onChange={(e) => setBaseCurrency(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500">
+              All reimbursements across this organization will be reported in this currency. Set this before configuring deadlines, categories, and receipt thresholds.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="industry">Industry (optional)</Label>
