@@ -7,6 +7,7 @@
 // 3. Language data cached in browser after first use
 
 import type Tesseract from "tesseract.js"
+import { detectMultiTransaction, type LineItem } from "@/lib/receipt-parser"
 
 let workerPromise: Promise<Tesseract.Worker> | null = null
 
@@ -33,6 +34,8 @@ export interface OcrResult {
   chargeType?: string
   currency?: string
   rawText?: string
+  items?: LineItem[]
+  itemCount?: number
 }
 
 function detectChargeType(text: string): string {
@@ -102,7 +105,19 @@ function parseReceiptText(text: string): OcrResult {
     source = line; break
   }
 
-  return { date, amount, source, chargeType: detectChargeType(text), currency, rawText: text }
+  const multi = detectMultiTransaction(text, currency, amount)
+  if (multi) amount = multi.total
+
+  return {
+    date,
+    amount,
+    source,
+    chargeType: detectChargeType(text),
+    currency,
+    rawText: text,
+    items: multi?.items,
+    itemCount: multi?.items.length,
+  }
 }
 
 /**

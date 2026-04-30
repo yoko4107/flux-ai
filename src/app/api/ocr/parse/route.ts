@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { rateLimit } from "@/lib/rate-limit"
+import { detectMultiTransaction, type LineItem } from "@/lib/receipt-parser"
 
 interface ParsedReceipt {
   date?: string
@@ -10,6 +11,8 @@ interface ParsedReceipt {
   currency?: string
   rawText?: string
   message?: string
+  items?: LineItem[]
+  itemCount?: number
 }
 
 function detectChargeType(text: string): string {
@@ -123,7 +126,23 @@ function parseTextToReceipt(text: string): ParsedReceipt {
   // Detect charge type from text content
   const chargeType = detectChargeType(text)
 
-  return { date, amount, source, chargeType, currency, rawText }
+  // Multi-transaction detection (e.g. Grab activity history with several rides).
+  // If we find 2+ amount lines that don't reconcile to a single "Total", sum them.
+  const multi = detectMultiTransaction(text, currency, amount)
+  if (multi) {
+    amount = multi.total
+  }
+
+  return {
+    date,
+    amount,
+    source,
+    chargeType,
+    currency,
+    rawText,
+    items: multi?.items,
+    itemCount: multi?.items.length,
+  }
 }
 
 async function parseWithGoogleVision(url: string, apiKey: string): Promise<ParsedReceipt> {

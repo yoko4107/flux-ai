@@ -13,9 +13,24 @@ interface ChatOcrCardProps {
 const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "ACCOMMODATION", "COMMUNICATION", "TRAINING", "ENTERTAINMENT", "MEETING", "EQUIPMENT", "PRINTING", "SOFTWARE", "OTHER"] as const
 const CURRENCIES = ["IDR", "USD", "SGD", "EUR", "GBP", "VND", "MYR", "THB", "PHP", "JPY", "CNY", "AUD", "HKD"] as const
 
+interface LineItem {
+  description: string
+  amount: number
+}
+
+function formatItemAmount(amount: number, currency: string): string {
+  const zeroDecimal = ["IDR", "VND", "JPY", "KRW"].includes(currency)
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: zeroDecimal ? 0 : 2,
+    maximumFractionDigits: zeroDecimal ? 0 : 2,
+  })
+}
+
 export function ChatOcrCard({ data, onConfirm, onEdit }: ChatOcrCardProps) {
   const [editing, setEditing] = useState(false)
   const { draft, ocrResult } = data
+  const rawItems = ocrResult.items as LineItem[] | undefined
+  const items = Array.isArray(rawItems) && rawItems.length >= 2 ? rawItems : null
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-md">
@@ -143,7 +158,29 @@ export function ChatOcrCard({ data, onConfirm, onEdit }: ChatOcrCardProps) {
         </div>
       </div>
 
-      
+      {items && (
+        <div className="px-4 pb-3">
+          <div className="rounded-lg border border-blue-100 bg-blue-50/50 overflow-hidden">
+            <div className="px-3 py-2 border-b border-blue-100 flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-blue-900 uppercase tracking-wider">
+                {items.length} transactions detected
+              </span>
+              <span className="text-[10px] text-blue-700">Summed to total above</span>
+            </div>
+            <ul className="divide-y divide-blue-100 max-h-48 overflow-y-auto">
+              {items.map((it, idx) => (
+                <li key={idx} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                  <span className="truncate text-gray-700 mr-2">{it.description}</span>
+                  <span className="shrink-0 font-medium text-gray-900 tabular-nums">
+                    {formatItemAmount(it.amount, draft.currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 px-4 pb-4">
         <button
           onClick={() => onConfirm(draft)}
