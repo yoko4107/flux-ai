@@ -14,6 +14,60 @@ interface RateCache {
 let cache: RateCache | null = null
 const CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
+// Hardcoded baseline rates (April 2026 estimates) used as a backstop when
+// live feeds don't return a particular currency. Live rates are layered on
+// top of this map so common majors stay fresh while exotic currencies
+// (VND, KWD, etc.) still convert sensibly.
+const FALLBACK_RATES: Record<string, number> = {
+  IDR: 1,
+  USD: 16200,
+  EUR: 17800,
+  GBP: 20500,
+  SGD: 12100,
+  MYR: 3650,
+  JPY: 108,
+  CNY: 2230,
+  AUD: 10500,
+  CAD: 11800,
+  CHF: 18100,
+  HKD: 2080,
+  KRW: 11.8,
+  THB: 460,
+  PHP: 285,
+  INR: 193,
+  VND: 0.65,
+  TWD: 500,
+  AED: 4410,
+  SAR: 4320,
+  NZD: 9800,
+  SEK: 1560,
+  NOK: 1500,
+  DKK: 2380,
+  BRL: 2850,
+  MXN: 940,
+  ZAR: 870,
+  TRY: 470,
+  PLN: 4150,
+  CZK: 700,
+  HUF: 44,
+  RUB: 185,
+  KWD: 52800,
+  BHD: 43000,
+  OMR: 42100,
+  QAR: 4450,
+  EGP: 330,
+  PKR: 58,
+  BDT: 147,
+  LKR: 50,
+  KES: 125,
+  NGN: 10.5,
+  GHS: 1080,
+  ARS: 15,
+  CLP: 17,
+  COP: 3.8,
+  PEN: 4350,
+}
+
 /**
  * Fetch current exchange rates to IDR.
  * Returns a map of currency code -> how many IDR per 1 unit.
@@ -24,7 +78,9 @@ async function fetchRates(): Promise<Record<string, number>> {
     return cache.rates
   }
 
-  const rates: Record<string, number> = { IDR: 1 }
+  // Pre-seed with hardcoded fallbacks so unknown currencies still convert.
+  // Live rates from the API will overlay these on top.
+  const rates: Record<string, number> = { ...FALLBACK_RATES }
 
   // Try exchangerate.host (free, no API key)
   try {
@@ -75,59 +131,9 @@ async function fetchRates(): Promise<Record<string, number>> {
     // fall through
   }
 
-  // Last resort: hardcoded approximate rates (April 2026 estimates)
-  const fallbackRates: Record<string, number> = {
-    IDR: 1,
-    USD: 16200,
-    EUR: 17800,
-    GBP: 20500,
-    SGD: 12100,
-    MYR: 3650,
-    JPY: 108,
-    CNY: 2230,
-    AUD: 10500,
-    CAD: 11800,
-    CHF: 18100,
-    HKD: 2080,
-    KRW: 11.8,
-    THB: 460,
-    PHP: 285,
-    INR: 193,
-    VND: 0.65,
-    TWD: 500,
-    AED: 4410,
-    SAR: 4320,
-    NZD: 9800,
-    SEK: 1560,
-    NOK: 1500,
-    DKK: 2380,
-    BRL: 2850,
-    MXN: 940,
-    ZAR: 870,
-    TRY: 470,
-    PLN: 4150,
-    CZK: 700,
-    HUF: 44,
-    RUB: 185,
-    KWD: 52800,
-    BHD: 43000,
-    OMR: 42100,
-    QAR: 4450,
-    EGP: 330,
-    PKR: 58,
-    BDT: 147,
-    LKR: 50,
-    KES: 125,
-    NGN: 10.5,
-    GHS: 1080,
-    ARS: 15,
-    CLP: 17,
-    COP: 3.8,
-    PEN: 4350,
-  }
-
-  cache = { rates: fallbackRates, fetchedAt: Date.now() }
-  return fallbackRates
+  // Both live feeds failed — return the pre-seeded fallback rates.
+  cache = { rates, fetchedAt: Date.now() }
+  return rates
 }
 
 /**

@@ -191,6 +191,142 @@ async function parseWithGoogleVision(url: string, apiKey: string): Promise<Parse
   return parseTextToReceipt(text)
 }
 
+// Read an image URL (local /api/files/... or remote) into base64 + mime.
+async function loadImageAsBase64(url: string): Promise<{ base64: string; mimeType: string }> {
+  if (url.startsWith("/api/files/")) {
+    const { readFile } = await import("fs/promises")
+    const path = await import("path")
+    const filename = url.replace("/api/files/", "").replace(/[^a-zA-Z0-9._-]/g, "")
+    const filePath = path.join("/tmp/receipts", filename)
+    const buffer = await readFile(filePath)
+    const ext = filename.split(".").pop()?.toLowerCase() ?? "jpeg"
+    const mimeType =
+      ext === "png" ? "image/png" :
+      ext === "webp" ? "image/webp" :
+      ext === "heic" ? "image/heic" :
+      "image/jpeg"
+    return { base64: buffer.toString("base64"), mimeType }
+  }
+  const res = await fetch(url)
+  if (!res.ok) throw new Error("Failed to fetch image")
+  const mimeType = res.headers.get("content-type") ?? "image/jpeg"
+  const ab = await res.arrayBuffer()
+  return { base64: Buffer.from(ab).toString("base64"), mimeType }
+}
+
+async function parseWithGemini(url: string, apiKey: string): Promise<ParsedReceipt> {
+  const { base64, mimeType } = await loadImageAsBase64(url)
+  const model = process.env.GEMINI_MODEL || "gemini-3-flash-preview"
+
+  const prompt = `You are an OCR system for expense receipts. Extract structured data from the image.
+
+The image may be either:
+A) A single receipt (one merchant transaction).
+B) An activity / transaction history listing multiple separate transactions
+   (e.g. Grab activity history, bank statement, ride history). In this case
+   each row is its own transaction and they MUST all appear in "items".
+
+Rules:
+- "currency" must be a valid ISO-4217 code (IDR, VND, USD, SGD, MYR, THB, PHP, JPY, EUR, GBP, etc.). Map symbols (₫→VND, Rp→IDR, $→USD, S$→SGD, RM→MYR, ฿→THB, ₱→PHP, ¥→JPY, €→EUR, £→GBP).
+- "amount" is the GRAND TOTAL across all items. For multi-row history images, sum every row.
+- "items" lists every distinct transaction/line. Each item has a short "description" (merchant or trip route) and a numeric "amount".
+- Do NOT include subtotals, taxes, tips, or running totals as separate items — only real transactions/products.
+- "date" is ISO YYYY-MM-DD. If multiple dates appear, use the most recent transaction's date.
+- Return numbers as plain numbers (no currency symbols, no thousands separators).
+- If you cannot read the image, return amount: 0 and items: [].`
+
+  const responseSchema = {
+    type: "object",
+    properties: {
+      source: { type: "string" },
+      date: { type: "string" },
+      currency: { type: "string" },
+      amount: { type: "number" },
+      chargeType: { type: "string" },
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            description: { type: "string" },
+            amount: { type: "number" },
+            date: { type: "string" },
+          },
+          required: ["description", "amount"],
+        },
+      },
+    },
+    required: ["amount", "items"],
+  }
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64 } },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema,
+          temperature: 0,
+        },
+      }),
+    }
+  )
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "")
+    throw new Error(`Gemini API error ${res.status}: ${errText.slice(0, 200)}`)
+  }
+
+  const data = await res.json()
+  const text =
+    data?.candidates?.[0]?.content?.parts?.[0]?.text ??
+    data?.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text ??
+    "{}"
+
+  let parsed: {
+    source?: string
+    date?: string
+    currency?: string
+    amount?: number
+    chargeType?: string
+    items?: LineItem[]
+  } = {}
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Error("Gemini returned non-JSON response")
+  }
+
+  // If model returned items but the totals don't reconcile, prefer the sum.
+  let amount = Number(parsed.amount) || 0
+  const items = Array.isArray(parsed.items) ? parsed.items.filter((i) => i && typeof i.amount === "number" && i.amount > 0) : []
+  if (items.length >= 2) {
+    const sum = items.reduce((acc, it) => acc + (it.amount || 0), 0)
+    if (sum > 0) amount = sum
+  }
+
+  return {
+    source: parsed.source,
+    date: parsed.date,
+    currency: parsed.currency,
+    amount,
+    chargeType: parsed.chargeType ?? detectChargeType(`${parsed.source ?? ""} ${items.map((i) => i.description).join(" ")}`),
+    items: items.length ? items : undefined,
+    itemCount: items.length || undefined,
+    rawText: text,
+  }
+}
+
 async function parseWithTesseract(url: string): Promise<ParsedReceipt> {
   let buffer: ArrayBuffer
 
@@ -245,12 +381,25 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  const geminiApiKey = process.env.GEMINI_API_KEY
+  const useGemini = geminiApiKey && geminiApiKey !== "placeholder"
   const googleApiKey = process.env.GOOGLE_VISION_API_KEY
   const useGoogle = googleApiKey && googleApiKey !== "placeholder"
 
+  // Routing: Gemini (vision LLM, best for multi-transaction screenshots) →
+  // Google Vision (classical OCR, good text extraction) → Tesseract (offline fallback).
   try {
     let result: ParsedReceipt
-    if (useGoogle) {
+    if (useGemini) {
+      try {
+        result = await parseWithGemini(url, geminiApiKey)
+      } catch (err) {
+        console.error("Gemini OCR failed, falling back:", err)
+        result = useGoogle
+          ? await parseWithGoogleVision(url, googleApiKey)
+          : await parseWithTesseract(url)
+      }
+    } else if (useGoogle) {
       result = await parseWithGoogleVision(url, googleApiKey)
     } else {
       result = await parseWithTesseract(url)

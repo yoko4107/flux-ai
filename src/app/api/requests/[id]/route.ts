@@ -247,7 +247,10 @@ export async function DELETE(
 
   const { id } = await params
 
-  const request = await prisma.reimbursementRequest.findUnique({ where: { id } })
+  const request = await prisma.reimbursementRequest.findUnique({
+    where: { id },
+    include: { approvalSteps: { select: { status: true } } },
+  })
 
   if (!request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -257,8 +260,24 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  if (request.status !== "DRAFT") {
-    return NextResponse.json({ error: "Only DRAFT requests can be deleted" }, { status: 400 })
+  // Employees may delete their own request while it is still:
+  //   - a DRAFT (never submitted), or
+  //   - SUBMITTED but no approver has acted yet (every step still PENDING).
+  // Once any approver has APPROVED / REJECTED / requested changes, the
+  // request is locked from the employee side to preserve audit trail.
+  const isDraft = request.status === "DRAFT"
+  const isUntouchedSubmission =
+    request.status === "SUBMITTED" &&
+    request.approvalSteps.every((s) => s.status === "PENDING")
+
+  if (!isDraft && !isUntouchedSubmission) {
+    return NextResponse.json(
+      {
+        error:
+          "This request can no longer be deleted because an approver has already acted on it.",
+      },
+      { status: 400 }
+    )
   }
 
   await prisma.reimbursementRequest.delete({ where: { id } })

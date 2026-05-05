@@ -674,7 +674,14 @@ function SpreadsheetTable({
     }
   }
 
-  const deleteRow = async (id: string) => {
+  const deleteRow = async (id: string, status: RequestStatus) => {
+    // Confirm before removing a submitted request — DRAFTS delete silently.
+    if (status !== "DRAFT") {
+      const ok = window.confirm(
+        "Delete this submitted request? This permanently removes it. You'll need to upload the receipt again if it was wrong."
+      )
+      if (!ok) return
+    }
     setDeleting((prev) => new Set([...prev, id]))
     try {
       const res = await fetch(`/api/requests/${id}`, { method: "DELETE" })
@@ -967,7 +974,7 @@ function SpreadsheetTable({
                               <Save className="h-3.5 w-3.5" />
                             </button>
                             <button
-                              onClick={() => deleteRow(req.id)}
+                              onClick={() => deleteRow(req.id, req.status)}
                               disabled={isDeleting}
                               className="rounded p-1 text-red-500 hover:bg-red-50 disabled:opacity-50"
                               title="Delete"
@@ -979,6 +986,22 @@ function SpreadsheetTable({
                               )}
                             </button>
                           </>
+                        ) : req.status === "SUBMITTED" ? (
+                          // Submitted but not yet acted on — employee can still
+                          // withdraw a wrong receipt. Server enforces the
+                          // "no approver has acted" rule.
+                          <button
+                            onClick={() => deleteRow(req.id, req.status)}
+                            disabled={isDeleting}
+                            className="rounded p-1 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                            title="Delete (withdraw before approval)"
+                          >
+                            {isDeleting ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
                         ) : null}
                       </div>
                     </td>

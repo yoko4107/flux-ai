@@ -232,17 +232,44 @@ export function ReimbursementChat() {
           return (await res.json()).url as string
         })()
 
+        // Kick off browser-side Tesseract in parallel as a last-resort fallback.
+        // The server route ( /api/ocr/parse ) prefers Gemini → Google Vision → Tesseract,
+        // and is the only path that can handle multi-transaction screenshots well.
+        const clientOcrPromise: Promise<Record<string, unknown> | undefined> =
+          file.type === "application/pdf"
+            ? Promise.resolve(undefined)
+            : (async () => {
+                try {
+                  const { runClientOCR } = await import("@/lib/client-ocr")
+                  return (await runClientOCR(file)) as unknown as Record<string, unknown>
+                } catch {
+                  return undefined
+                }
+              })()
+
+        const receiptUrl = await uploadPromise
+
         let ocrResult: Record<string, unknown> | undefined
         if (file.type !== "application/pdf") {
           try {
-            const { runClientOCR } = await import("@/lib/client-ocr")
-            ocrResult = await runClientOCR(file) as unknown as Record<string, unknown>
+            const res = await fetch("/api/ocr/parse", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: receiptUrl }),
+            })
+            if (res.ok) {
+              const serverResult = (await res.json()) as Record<string, unknown>
+              const hasUseful =
+                (typeof serverResult.amount === "number" && serverResult.amount > 0) ||
+                (Array.isArray(serverResult.items) && serverResult.items.length > 0)
+              if (hasUseful) ocrResult = serverResult
+            }
           } catch {
-            // OCR failed, non-fatal
+            // server OCR failed — fall through to client result
           }
+          if (!ocrResult) ocrResult = await clientOcrPromise
         }
 
-        const receiptUrl = await uploadPromise
         const result = processFileInput(receiptUrl, ocrResult, preview)
 
         if (result.messages.length > 0) dispatch({ type: "ADD_MESSAGES", messages: result.messages })
