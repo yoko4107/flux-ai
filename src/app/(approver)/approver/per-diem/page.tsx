@@ -3,6 +3,15 @@
 import { useEffect, useState } from "react"
 import { Loader2, Plane, X, CheckCircle2, XCircle } from "lucide-react"
 
+// Display overrides for destination country codes — keeps the UI consistent
+// with the employee + dashboard side ("SA" renders as "KSA").
+const COUNTRY_LABEL: Record<string, string> = {
+  SA: "KSA",
+}
+function fmtCountry(cc: string): string {
+  return COUNTRY_LABEL[cc] ?? cc
+}
+
 type PerDiemRequest = {
   id: string
   destinationCountry: string
@@ -100,7 +109,7 @@ export default function ApproverPerDiemPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((r) => {
-            const where = r.destinationCity ? `${r.destinationCity}, ${r.destinationCountry}` : r.destinationCountry
+            const where = r.destinationCity ? `${r.destinationCity}, ${fmtCountry(r.destinationCountry)}` : fmtCountry(r.destinationCountry)
             const isOpen = expanded === r.id
             return (
               <div key={r.id} className="rounded-xl border border-gray-200 bg-white p-4">

@@ -1076,6 +1076,10 @@ const PER_DIEM_STATUS_TONE: Record<PerDiemRow["status"], string> = {
   CANCELLED: "bg-gray-100 text-gray-600",
 }
 
+const PER_DIEM_COUNTRY_LABEL: Record<string, string> = {
+  SA: "KSA",
+}
+
 function PerDiemSection() {
   const [rows, setRows] = useState<PerDiemRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -1129,7 +1133,7 @@ function PerDiemSection() {
             {recent.map((r) => (
               <tr key={r.id} className="hover:bg-gray-50/60">
                 <td className="px-5 py-2.5 text-gray-900">
-                  {r.destinationCity ? `${r.destinationCity}, ` : ""}{r.destinationCountry}
+                  {r.destinationCity ? `${r.destinationCity}, ` : ""}{PER_DIEM_COUNTRY_LABEL[r.destinationCountry] ?? r.destinationCountry}
                 </td>
                 <td className="px-5 py-2.5 text-gray-700 tabular-nums">
                   {r.startDate.slice(0, 10)} → {r.endDate.slice(0, 10)}

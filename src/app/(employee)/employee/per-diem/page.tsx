@@ -90,8 +90,13 @@ const STATUS_COLOR: Record<PerDiemRequest["status"], string> = {
 }
 
 // Locale guess for currency formatting. Used by formatLocal() to render
-// "IDR 250.000" vs "USD 15,99" / "USD 15.99" in the way the user expects
-// for that currency's region.
+// "IDR 250.000" vs "USD 15.99" in the way the user expects for that
+// currency's region.
+//
+// Arabic locales (ar-SA / ar-AE) default to Eastern-Arabic digits ٠١٢٣…
+// which our finance users have explicitly asked us to avoid; we pin the
+// `nu=latn` Unicode locale extension so the formatter keeps the locale's
+// thousand-/decimal-separator conventions but renders 0-9 digits.
 const CURRENCY_LOCALE: Record<string, string> = {
   IDR: "id-ID",
   VND: "vi-VN",
@@ -110,13 +115,19 @@ const CURRENCY_LOCALE: Record<string, string> = {
   GBP: "en-GB",
   AUD: "en-AU",
   NZD: "en-NZ",
-  SAR: "ar-SA",
-  AED: "ar-AE",
+  SAR: "ar-SA-u-nu-latn",
+  AED: "ar-AE-u-nu-latn",
   EUR: "de-DE",
   CHF: "de-CH",
   SEK: "sv-SE",
   NOK: "nb-NO",
   DKK: "da-DK",
+}
+
+// ISO-3166 code → preferred display label. Defaults to the raw code
+// (e.g. "VN", "ID") when not overridden.
+const COUNTRY_LABEL: Record<string, string> = {
+  SA: "KSA", // Kingdom of Saudi Arabia
 }
 
 export default function EmployeePerDiemPage() {
@@ -188,7 +199,7 @@ export default function EmployeePerDiemPage() {
               {requests.map((r) => (
                 <tr key={r.id}>
                   <td className="px-5 py-3 text-gray-900">
-                    {r.destinationCity ? `${r.destinationCity}, ` : ""}{r.destinationCountry}
+                    {r.destinationCity ? `${r.destinationCity}, ` : ""}{COUNTRY_LABEL[r.destinationCountry] ?? r.destinationCountry}
                     {r.isHighCost && <span className="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">High-cost</span>}
                   </td>
                   <td className="px-5 py-3 text-gray-700">{r.startDate.slice(0,10)} → {r.endDate.slice(0,10)}</td>
@@ -272,7 +283,7 @@ function RateSummary({ rates }: { rates: RateTable }) {
               className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
               title={`Policy: USD ${r.standard.toFixed(2)}${r.highCost ? ` / ${r.highCost.toFixed(2)} high-cost` : ""}`}
             >
-              <span className="font-medium">{cc}</span>
+              <span className="font-medium">{COUNTRY_LABEL[cc] ?? cc}</span>
               <span className="text-right tabular-nums">
                 <div>{cur} {formatLocal(r.standard * rate, cur)}</div>
                 {r.highCost && (
@@ -494,7 +505,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Country</span>
               <select required value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
                 <option value="">—</option>
-                {countries.map((cc) => <option key={cc} value={cc}>{cc}</option>)}
+                {countries.map((cc) => <option key={cc} value={cc}>{COUNTRY_LABEL[cc] ?? cc}</option>)}
               </select>
             </label>
             <label className="block">
