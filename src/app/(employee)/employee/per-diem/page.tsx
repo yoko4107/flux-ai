@@ -17,11 +17,11 @@ type RateTable = Record<string, Rate>
 type DayRow = {
   date: string // YYYY-MM-DD
   // Amount the employee is claiming for this day, in the chosen currency.
-  // Defaults to the country's daily rate (converted to the chosen currency)
-  // when the day first materialises; user can edit. The legacy travel-day /
-  // meal-deduction flags still exist on the wire but are always false now —
-  // the server treats `amount` as a per-day override.
-  amount: number
+  // Starts as null (blank input) — the user fills each day in. The
+  // country's daily rate is shown in the form's rate-preview banner so
+  // users have a reference, but no values are pre-populated. Submission
+  // is blocked until every day has a number entered.
+  amount: number | null
   isTravelDay: boolean
   breakfastProvided: boolean
   lunchProvided: boolean
@@ -367,7 +367,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [reason, setReason] = useState("")
-  const [days, setDays] = useState<DayRow[]>([{ date: today, amount: 0, isTravelDay: false, breakfastProvided: false, lunchProvided: false, dinnerProvided: false }])
+  const [days, setDays] = useState<DayRow[]>([{ date: today, amount: null, isTravelDay: false, breakfastProvided: false, lunchProvided: false, dinnerProvided: false }])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -408,8 +408,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
   )
 
   // Re-materialise the day grid whenever the date range changes. Each new
-  // day defaults to the current preview rate; surviving dates keep whatever
-  // amount the user typed.
+  // day starts blank; surviving dates keep whatever amount the user typed.
   useEffect(() => {
     if (!startDate || !endDate || endDate < startDate) {
       setDays([])
@@ -423,7 +422,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
       const existing = days.find((d) => d.date === dStr)
       newDays.push(existing ?? {
         date: dStr,
-        amount: previewRate.rate,
+        amount: null,
         isTravelDay: false,
         breakfastProvided: false,
         lunchProvided: false,
@@ -435,26 +434,28 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, endDate])
 
-  // When the country / city / currency / FX rate changes, the preview rate
-  // changes too. Reset every day's amount to the new default — switching
-  // destination currencies fundamentally changes what "150,000" means, so
-  // overwriting is safer than keeping a stale number.
+  // Switching destination country / city / currency wipes any typed amounts
+  // because "150,000" means something completely different across currencies.
+  // Resetting to null forces the user to re-enter intentionally.
   useEffect(() => {
-    if (previewRate.rate <= 0) return
-    setDays((prev) => prev.map((d) => ({ ...d, amount: previewRate.rate })))
+    setDays((prev) => prev.map((d) => ({ ...d, amount: null })))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewRate.rate])
+  }, [country, city, currency])
 
   function setDayField<K extends keyof DayRow>(idx: number, key: K, value: DayRow[K]) {
     setDays((prev) => prev.map((d, i) => (i === idx ? { ...d, [key]: value } : d)))
   }
 
-  // Each day's amount is whatever the user typed (or the pre-filled
-  // country rate). Total = simple sum.
+  // Each day's amount is whatever the user typed; nulls treat as 0 in
+  // the running sum so the total updates as they fill in.
   const total = useMemo(
-    () => Math.round(days.reduce((acc, d) => acc + (d.amount || 0), 0) * 100) / 100,
+    () => Math.round(days.reduce((acc, d) => acc + (d.amount ?? 0), 0) * 100) / 100,
     [days]
   )
+
+  // Submission is blocked until every day has a number entered (≥0 is fine —
+  // a user might explicitly claim 0 for a fully-covered day).
+  const allDaysFilled = days.length > 0 && days.every((d) => d.amount != null && d.amount >= 0)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -474,14 +475,16 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           reason: reason || undefined,
           // Send each day with the typed amount as the override; legacy
           // travel-day / meal-deduction flags are always false in the new
-          // simplified UI. Server stores amountOverride directly.
+          // simplified UI. Server stores amountOverride directly. The
+          // `allDaysFilled` guard above means d.amount is a number here,
+          // never null — fall back to 0 defensively for the type checker.
           days: days.map((d) => ({
             date: d.date,
             isTravelDay: false,
             breakfastProvided: false,
             lunchProvided: false,
             dinnerProvided: false,
-            amountOverride: d.amount,
+            amountOverride: d.amount ?? 0,
           })),
         }),
       })
@@ -578,16 +581,18 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
                           step="any"
                           min="0"
                           max="100000000"
-                          value={d.amount}
+                          placeholder="0"
+                          value={d.amount ?? ""}
                           onChange={(e) => {
-                            const v = e.target.value === "" ? 0 : Number(e.target.value)
-                            setDayField(idx, "amount", v)
+                            const raw = e.target.value
+                            // Empty string → null (blank). Otherwise parse the number.
+                            setDayField(idx, "amount", raw === "" ? null : Number(raw))
                           }}
                           className="w-36 rounded border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-200"
                         />
                       </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-gray-700">
-                        {currency} {formatLocal(d.amount, currency)}
+                      <td className="px-4 py-2 text-right tabular-nums text-gray-500">
+                        {d.amount == null ? "—" : `${currency} ${formatLocal(d.amount, currency)}`}
                       </td>
                     </tr>
                   ))}
@@ -600,7 +605,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
                 </tfoot>
               </table>
               <p className="border-t border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
-                Each day pre-fills with the country's daily rate ({currency} {formatLocal(previewRate.rate, currency)}). Edit any amount directly.
+                Enter the amount you're claiming for each day in {currency}. Reference: {currency} {formatLocal(previewRate.rate, currency)} / day for {COUNTRY_LABEL[country] ?? country}.
               </p>
             </div>
           )}
@@ -610,7 +615,12 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
 
         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-gray-200 bg-white px-5 py-3">
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
-          <button type="submit" disabled={busy || previewRate.rate <= 0 || days.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-[#0B1E3F] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+          <button
+            type="submit"
+            disabled={busy || previewRate.rate <= 0 || days.length === 0 || !allDaysFilled}
+            title={!allDaysFilled ? "Fill in an amount for every day before submitting" : ""}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#0B1E3F] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          >
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Submit {currency} {formatLocal(total, currency)}
           </button>
