@@ -26,23 +26,10 @@ type DayRow = {
   amountOverride: number | null
 }
 
-// Currencies the form lets you submit in. USD is canonical (matches the
-// admin-configured rates). Anything else is converted at submission via
-// fx-rates and the chosen-currency total is stored alongside the USD ref.
-const CURRENCY_OPTIONS = ["USD", "IDR", "VND", "SGD", "MYR", "THB", "PHP", "JPY", "EUR", "GBP", "AUD", "CNY", "INR", "HKD", "KRW", "SAR", "AED", "TWD", "CHF", "CAD", "NZD"]
-
-// Country code → default claim currency. Mirrors COUNTRY_TO_CURRENCY in
-// lib/per-diem.ts; duplicated here so the form doesn't need a server round-trip.
-const COUNTRY_TO_CURRENCY: Record<string, string> = {
-  VN: "VND", ID: "IDR", SA: "SAR", AE: "AED",
-  SG: "SGD", MY: "MYR", TH: "THB", PH: "PHP",
-  JP: "JPY", KR: "KRW", CN: "CNY", HK: "HKD", TW: "TWD",
-  IN: "INR", AU: "AUD", NZ: "NZD",
-  US: "USD", CA: "CAD", GB: "GBP",
-  DE: "EUR", FR: "EUR", ES: "EUR", IT: "EUR", NL: "EUR",
-  IE: "EUR", PT: "EUR", BE: "EUR", AT: "EUR", FI: "EUR", GR: "EUR",
-  CH: "CHF", SE: "SEK", NO: "NOK", DK: "DKK",
-}
+// Currencies the form lets you submit in. IDR is the default (org's
+// payout currency); everything else is converted at submission via
+// fx-rates with the chosen-currency total stored alongside the USD ref.
+const CURRENCY_OPTIONS = ["IDR", "USD", "VND", "SGD", "MYR", "THB", "PHP", "JPY", "EUR", "GBP", "AUD", "CNY", "INR", "HKD", "KRW", "SAR", "AED", "TWD", "CHF", "CAD", "NZD"]
 
 type PerDiemRequest = {
   id: string
@@ -259,11 +246,10 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
   const initialCountry = countries[0] ?? ""
   const [country, setCountry] = useState(initialCountry)
   const [city, setCity] = useState("")
-  // Currency follows the destination country by default
-  // (Vietnam → VND, Indonesia → IDR, Saudi → SAR …). Falls back to USD
-  // for anything not in the map. Employees can still override via the
-  // dropdown after.
-  const [currency, setCurrency] = useState(COUNTRY_TO_CURRENCY[initialCountry] ?? "USD")
+  // Default claim currency is IDR (the org's payout currency). The
+  // destination is just where the trip is — payout stays in the home
+  // currency unless the employee picks something else from the dropdown.
+  const [currency, setCurrency] = useState("IDR")
   const [exchangeRate, setExchangeRate] = useState(1)
   const [fxLoading, setFxLoading] = useState(false)
   const [startDate, setStartDate] = useState(today)
@@ -388,19 +374,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           <div className="grid grid-cols-3 gap-3">
             <label className="block">
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Country</span>
-              <select
-                required
-                value={country}
-                onChange={(e) => {
-                  const cc = e.target.value
-                  setCountry(cc)
-                  // Auto-set claim currency to the destination's local
-                  // currency so the form lands in something sensible the
-                  // moment they pick a country.
-                  if (cc && COUNTRY_TO_CURRENCY[cc]) setCurrency(COUNTRY_TO_CURRENCY[cc])
-                }}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
+              <select required value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
                 <option value="">—</option>
                 {countries.map((cc) => <option key={cc} value={cc}>{cc}</option>)}
               </select>
