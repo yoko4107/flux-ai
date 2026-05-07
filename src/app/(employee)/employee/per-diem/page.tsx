@@ -31,6 +31,23 @@ type DayRow = {
 // fx-rates with the chosen-currency total stored alongside the USD ref.
 const CURRENCY_OPTIONS = ["IDR", "USD", "VND", "SGD", "MYR", "THB", "PHP", "JPY", "EUR", "GBP", "AUD", "CNY", "INR", "HKD", "KRW", "SAR", "AED", "TWD", "CHF", "CAD", "NZD"]
 
+// Country code → primary local currency. Used by the rate-summary widget
+// to display each configured per-diem rate in the destination's local
+// currency (so admins set policy in USD, employees see what they'd earn
+// in local terms).
+const COUNTRY_TO_CURRENCY: Record<string, string> = {
+  VN: "VND", ID: "IDR", SA: "SAR", AE: "AED",
+  SG: "SGD", MY: "MYR", TH: "THB", PH: "PHP",
+  JP: "JPY", KR: "KRW", CN: "CNY", HK: "HKD", TW: "TWD",
+  IN: "INR", AU: "AUD", NZ: "NZD",
+  US: "USD", CA: "CAD", GB: "GBP",
+  DE: "EUR", FR: "EUR", ES: "EUR", IT: "EUR", NL: "EUR",
+  IE: "EUR", PT: "EUR", BE: "EUR", AT: "EUR", FI: "EUR", GR: "EUR",
+  CH: "CHF", SE: "SEK", NO: "NOK", DK: "DKK",
+}
+
+const ZERO_DECIMAL_CURRENCIES = new Set(["IDR", "VND", "JPY", "KRW"])
+
 type PerDiemRequest = {
   id: string
   destinationCountry: string
@@ -191,23 +208,82 @@ export default function EmployeePerDiemPage() {
 
 function RateSummary({ rates }: { rates: RateTable }) {
   const entries = Object.entries(rates)
+  // Keep the policy USD reference visible by hovering — but the headline
+  // figure is the destination's local currency. We pull a USD→target rate
+  // for each unique currency in parallel.
+  const [fx, setFx] = useState<Record<string, number>>({})
+  const [fxLoading, setFxLoading] = useState(false)
+
+  useEffect(() => {
+    if (entries.length === 0) return
+    const uniqueCurrencies = Array.from(
+      new Set(entries.map(([cc]) => COUNTRY_TO_CURRENCY[cc] ?? "USD"))
+    )
+    const toFetch = uniqueCurrencies.filter((c) => c !== "USD")
+    if (toFetch.length === 0) return
+    let cancelled = false
+    setFxLoading(true)
+    Promise.all(
+      toFetch.map((c) =>
+        fetch(`/api/fx/convert?from=USD&to=${c}&amount=1`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => [c, d?.exchangeRate ? Number(d.exchangeRate) : 1] as const)
+          .catch(() => [c, 1] as const)
+      )
+    )
+      .then((pairs) => { if (!cancelled) setFx(Object.fromEntries(pairs)) })
+      .finally(() => { if (!cancelled) setFxLoading(false) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries.map(([cc]) => cc).join(",")])
+
   if (entries.length === 0) return null
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Configured rates (USD/day)</h2>
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+        Configured rates · daily {fxLoading && <span className="text-gray-400">(converting…)</span>}
+      </h2>
       <div className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-        {entries.map(([cc, r]) => (
-          <div key={cc} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
-            <span className="font-medium">{cc}</span>
-            <span className="tabular-nums">
-              ${r.standard.toFixed(2)}
-              {r.highCost && <span className="ml-1 text-xs text-amber-700">/ ${r.highCost.toFixed(2)} high-cost</span>}
-            </span>
-          </div>
-        ))}
+        {entries.map(([cc, r]) => {
+          const cur = COUNTRY_TO_CURRENCY[cc] ?? "USD"
+          const rate = cur === "USD" ? 1 : (fx[cur] ?? 1)
+          return (
+            <div
+              key={cc}
+              className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+              title={`Policy: USD ${r.standard.toFixed(2)}${r.highCost ? ` / ${r.highCost.toFixed(2)} high-cost` : ""}`}
+            >
+              <span className="font-medium">{cc}</span>
+              <span className="text-right tabular-nums">
+                <div>{cur} {formatLocal(r.standard * rate, cur)}</div>
+                {r.highCost && (
+                  <div className="text-xs text-amber-700">
+                    / {cur} {formatLocal(r.highCost * rate, cur)} high-cost
+                  </div>
+                )}
+                {cur !== "USD" && (
+                  <div className="text-[10px] font-normal text-gray-400">
+                    USD {r.standard.toFixed(2)}{r.highCost ? ` / ${r.highCost.toFixed(2)}` : ""}
+                  </div>
+                )}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
+}
+
+/** Locale-formatted display for a currency amount. Zero-decimal currencies
+ *  (IDR, VND, JPY, KRW) drop the cents to look natural. */
+function formatLocal(amount: number, currency: string): string {
+  const decimals = ZERO_DECIMAL_CURRENCIES.has(currency) ? 0 : 2
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
 }
 
 function CancelButton({ id, onDone }: { id: string; onDone: () => void }) {
