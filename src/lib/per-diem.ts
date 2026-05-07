@@ -52,6 +52,57 @@ export const DEFAULT_RATES: RateTable = {
   },
 }
 
+/**
+ * ISO-3166-1 alpha-2 country → primary ISO-4217 currency.
+ * Used by the submission form to default the claim currency to the
+ * destination's local currency (Vietnam → VND, Indonesia → IDR, …).
+ * Employees can still override the default in the form.
+ *
+ * Falls back to "USD" when the country isn't in the table — matches the
+ * spec's reference assumption that USD is canonical.
+ */
+export const COUNTRY_TO_CURRENCY: Record<string, string> = {
+  VN: "VND",
+  ID: "IDR",
+  SA: "SAR",
+  AE: "AED",
+  SG: "SGD",
+  MY: "MYR",
+  TH: "THB",
+  PH: "PHP",
+  JP: "JPY",
+  KR: "KRW",
+  CN: "CNY",
+  HK: "HKD",
+  TW: "TWD",
+  IN: "INR",
+  AU: "AUD",
+  NZ: "NZD",
+  US: "USD",
+  CA: "CAD",
+  GB: "GBP",
+  // Eurozone — extend as needed.
+  DE: "EUR",
+  FR: "EUR",
+  ES: "EUR",
+  IT: "EUR",
+  NL: "EUR",
+  IE: "EUR",
+  PT: "EUR",
+  BE: "EUR",
+  AT: "EUR",
+  FI: "EUR",
+  GR: "EUR",
+  CH: "CHF",
+  SE: "SEK",
+  NO: "NOK",
+  DK: "DKK",
+}
+
+export function defaultCurrencyForCountry(countryCode: string): string {
+  return COUNTRY_TO_CURRENCY[countryCode.toUpperCase()] ?? "USD"
+}
+
 /** Meal deduction multipliers (off the FULL daily rate). */
 export const MEAL_DEDUCTIONS = {
   breakfast: 0.15,

@@ -4,6 +4,7 @@ import {
   calculateTotalPerDiem,
   rateForDestination,
   daysBetween,
+  defaultCurrencyForCountry,
   DEFAULT_RATES,
 } from "./per-diem"
 
@@ -123,6 +124,25 @@ describe("per-diem.rateForDestination", () => {
   })
   it("country code is case-insensitive", () => {
     expect(rateForDestination(DEFAULT_RATES, "vn")).toEqual({ rate: 70, isHighCost: false })
+  })
+})
+
+describe("per-diem.defaultCurrencyForCountry", () => {
+  it("maps the spec's three countries to their local currency", () => {
+    expect(defaultCurrencyForCountry("VN")).toBe("VND")
+    expect(defaultCurrencyForCountry("ID")).toBe("IDR")
+    expect(defaultCurrencyForCountry("SA")).toBe("SAR")
+  })
+  it("eurozone countries return EUR", () => {
+    expect(defaultCurrencyForCountry("DE")).toBe("EUR")
+    expect(defaultCurrencyForCountry("FR")).toBe("EUR")
+    expect(defaultCurrencyForCountry("IE")).toBe("EUR")
+  })
+  it("falls back to USD for anything unmapped", () => {
+    expect(defaultCurrencyForCountry("ZZ")).toBe("USD")
+  })
+  it("is case-insensitive", () => {
+    expect(defaultCurrencyForCountry("vn")).toBe("VND")
   })
 })
 
