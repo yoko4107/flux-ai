@@ -1080,6 +1080,13 @@ const PER_DIEM_COUNTRY_LABEL: Record<string, string> = {
   SA: "KSA",
 }
 
+/** YYYY-MM-DD or ISO timestamp → DD/MM/YYYY for display. */
+function perDiemFmtDate(input: string | null | undefined): string {
+  if (!input) return ""
+  const m = input.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : input
+}
+
 function PerDiemSection() {
   const [rows, setRows] = useState<PerDiemRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -1145,7 +1152,7 @@ function PerDiemSection() {
                   {r.destinationCity ? `${r.destinationCity}, ` : ""}{PER_DIEM_COUNTRY_LABEL[r.destinationCountry] ?? r.destinationCountry}
                 </td>
                 <td className="px-5 py-2.5 text-gray-700 tabular-nums">
-                  {r.startDate.slice(0, 10)} → {r.endDate.slice(0, 10)}
+                  {perDiemFmtDate(r.startDate)} → {perDiemFmtDate(r.endDate)}
                 </td>
                 <td className="px-5 py-2.5 text-right tabular-nums">{r.totalDays}</td>
                 <td className="px-5 py-2.5 text-right tabular-nums font-medium text-gray-900">

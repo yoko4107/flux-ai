@@ -50,6 +50,15 @@ const COUNTRY_TO_CURRENCY: Record<string, string> = {
 
 const ZERO_DECIMAL_CURRENCIES = new Set(["IDR", "VND", "JPY", "KRW"])
 
+/** Render a YYYY-MM-DD or ISO timestamp as DD/MM/YYYY (e.g. 20/02/1977).
+ *  Falls back to the input string if the format isn't recognised. */
+function fmtDate(input: string | Date | null | undefined): string {
+  if (!input) return ""
+  const s = typeof input === "string" ? input : input.toISOString()
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : s
+}
+
 type PerDiemRequest = {
   id: string
   destinationCountry: string
@@ -259,7 +268,7 @@ export default function EmployeePerDiemPage() {
                     {r.destinationCity ? `${r.destinationCity}, ` : ""}{COUNTRY_LABEL[r.destinationCountry] ?? r.destinationCountry}
                     {r.isHighCost && <span className="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">High-cost</span>}
                   </td>
-                  <td className="px-5 py-3 text-gray-700">{r.startDate.slice(0,10)} → {r.endDate.slice(0,10)}</td>
+                  <td className="px-5 py-3 text-gray-700 tabular-nums">{fmtDate(r.startDate)} → {fmtDate(r.endDate)}</td>
                   <td className="px-5 py-3 text-right tabular-nums">{r.totalDays}</td>
                   <td className="px-5 py-3 text-right tabular-nums font-semibold text-gray-900">
                     {r.currency} {formatLocal(Number(r.totalAmount), r.currency)}
@@ -767,7 +776,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
                 <tbody className="divide-y divide-gray-100">
                   {days.map((d, idx) => (
                     <tr key={d.date}>
-                      <td className="px-4 py-2 tabular-nums">{d.date}</td>
+                      <td className="px-4 py-2 tabular-nums">{fmtDate(d.date)}</td>
                       <td className="px-4 py-2 text-right">
                         <input
                           type="number"
@@ -854,7 +863,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
                         className="mt-1 block w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
                       >
                         <option value="">trip-wide</option>
-                        {days.map((d) => <option key={d.date} value={d.date}>{d.date}</option>)}
+                        {days.map((d) => <option key={d.date} value={d.date}>{fmtDate(d.date)}</option>)}
                       </select>
                     </label>
                     <label className="md:col-span-2 block">

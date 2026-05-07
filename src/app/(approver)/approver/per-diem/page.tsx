@@ -12,6 +12,13 @@ function fmtCountry(cc: string): string {
   return COUNTRY_LABEL[cc] ?? cc
 }
 
+/** YYYY-MM-DD or ISO timestamp → DD/MM/YYYY. */
+function fmtDate(input: string | null | undefined): string {
+  if (!input) return ""
+  const m = input.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : input
+}
+
 function hasWirePayout(r: {
   payoutCurrency: string | null
   payoutAccountHolder: string | null
@@ -162,7 +169,7 @@ export default function ApproverPerDiemPage() {
                       <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_COLOR[r.status]}`}>{r.status.toLowerCase()}</span>
                     </div>
                     <div className="text-sm text-gray-700">
-                      {r.startDate.slice(0,10)} → {r.endDate.slice(0,10)} · {r.totalDays} day{r.totalDays === 1 ? "" : "s"} ·{" "}
+                      {fmtDate(r.startDate)} → {fmtDate(r.endDate)} · {r.totalDays} day{r.totalDays === 1 ? "" : "s"} ·{" "}
                       <strong>{r.currency} {Number(r.totalAmount).toFixed(2)}</strong>
                       {r.currency !== "USD" && (
                         <span className="ml-1 text-xs text-gray-500">(≈ USD {Number(r.totalAmountUSD).toFixed(2)})</span>
@@ -201,7 +208,7 @@ export default function ApproverPerDiemPage() {
                     <tbody className="divide-y divide-gray-100">
                       {r.days.map((d) => (
                         <tr key={d.id} className={d.isOverride ? "bg-amber-50/50" : ""}>
-                          <td className="px-3 py-1.5 tabular-nums">{d.date.slice(0,10)}</td>
+                          <td className="px-3 py-1.5 tabular-nums">{fmtDate(d.date)}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{r.currency} {Number(d.baseRate).toFixed(2)}</td>
                           <td className="px-3 py-1.5 text-center">{d.isTravelDay ? "✓" : "—"}</td>
                           <td className="px-3 py-1.5 text-center">{d.breakfastProvided ? "✓" : "—"}</td>
@@ -242,7 +249,7 @@ export default function ApproverPerDiemPage() {
                               </span>
                             </td>
                             <td className="px-2 py-1 text-gray-800">{it.description}</td>
-                            <td className="px-2 py-1 text-gray-500 tabular-nums">{it.date ? it.date.slice(0, 10) : "—"}</td>
+                            <td className="px-2 py-1 text-gray-500 tabular-nums">{it.date ? fmtDate(it.date) : "—"}</td>
                             <td className="px-2 py-1 text-right tabular-nums text-gray-800">
                               {it.amount != null ? `${r.currency} ${Number(it.amount).toFixed(2)}` : "—"}
                             </td>
