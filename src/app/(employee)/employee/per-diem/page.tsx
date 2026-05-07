@@ -66,6 +66,14 @@ type PerDiemRequest = {
   reason: string | null
   rejectionReason: string | null
   supervisorNote: string | null
+  payoutCurrency: string | null
+  payoutAccountHolder: string | null
+  payoutAccountNumber: string | null
+  payoutBankName: string | null
+  payoutBankAddress: string | null
+  payoutSwiftCode: string | null
+  payoutRoutingNumber: string | null
+  payoutNotes: string | null
   createdAt: string
   days: {
     id: string
@@ -80,6 +88,27 @@ type PerDiemRequest = {
     dailyTotalUSD: string
     isOverride: boolean
   }[]
+}
+
+interface PayoutOverride {
+  payoutCurrency: string
+  payoutAccountHolder: string
+  payoutAccountNumber: string
+  payoutBankName: string
+  payoutBankAddress: string
+  payoutSwiftCode: string
+  payoutRoutingNumber: string
+  payoutNotes: string
+}
+const EMPTY_PAYOUT: PayoutOverride = {
+  payoutCurrency: "",
+  payoutAccountHolder: "",
+  payoutAccountNumber: "",
+  payoutBankName: "",
+  payoutBankAddress: "",
+  payoutSwiftCode: "",
+  payoutRoutingNumber: "",
+  payoutNotes: "",
 }
 
 const STATUS_COLOR: Record<PerDiemRequest["status"], string> = {
@@ -133,17 +162,21 @@ const COUNTRY_LABEL: Record<string, string> = {
 export default function EmployeePerDiemPage() {
   const [rates, setRates] = useState<RateTable>({})
   const [requests, setRequests] = useState<PerDiemRequest[]>([])
+  const [residenceCurrency, setResidenceCurrency] = useState("IDR")
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
 
   async function load() {
     setLoading(true)
-    const [r, list] = await Promise.all([
+    const [r, list, profile] = await Promise.all([
       fetch("/api/per-diem/rates").then((res) => res.json()),
       fetch("/api/per-diem/request?scope=mine").then((res) => res.json()),
+      fetch("/api/profile/preferences").then((res) => res.ok ? res.json() : null).catch(() => null),
     ])
     setRates(r.rates ?? {})
     setRequests(list.requests ?? [])
+    const cur = profile?.profile?.defaultCurrency
+    if (typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) setResidenceCurrency(cur)
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -205,9 +238,16 @@ export default function EmployeePerDiemPage() {
                   <td className="px-5 py-3 text-gray-700">{r.startDate.slice(0,10)} → {r.endDate.slice(0,10)}</td>
                   <td className="px-5 py-3 text-right tabular-nums">{r.totalDays}</td>
                   <td className="px-5 py-3 text-right tabular-nums font-semibold text-gray-900">
-                    {r.currency} {Number(r.totalAmount).toFixed(2)}
-                    {r.currency !== "USD" && (
+                    {r.currency} {formatLocal(Number(r.totalAmount), r.currency)}
+                    {/* USD reference only useful when the claim isn't in
+                        the residence currency — drop it otherwise. */}
+                    {r.currency !== "USD" && r.currency !== residenceCurrency && (
                       <div className="text-[10px] font-normal text-gray-500">≈ USD {Number(r.totalAmountUSD).toFixed(2)}</div>
+                    )}
+                    {(r.payoutCurrency || r.payoutAccountNumber || r.payoutSwiftCode) && (
+                      <div className="mt-0.5 text-[10px] font-normal text-blue-700">
+                        Wire to {r.payoutCurrency ?? r.currency}
+                      </div>
                     )}
                   </td>
                   <td className="px-5 py-3">
@@ -362,6 +402,28 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
   // destination is just where the trip is — payout stays in the home
   // currency unless the employee picks something else from the dropdown.
   const [currency, setCurrency] = useState("IDR")
+  // Residence / payout currency comes from UserProfile.defaultCurrency
+  // (falls back to Organization.baseCurrency, then "IDR"). Used to decide
+  // whether to surface the USD reference on the rate preview / total.
+  const [residenceCurrency, setResidenceCurrency] = useState("IDR")
+  // Foreign-wire override section. Initially collapsed; once expanded, the
+  // user can pick a different currency + supply bank details.
+  const [wireOpen, setWireOpen] = useState(false)
+  const [payout, setPayout] = useState<PayoutOverride>(EMPTY_PAYOUT)
+
+  // Pull the residence currency once on mount.
+  useEffect(() => {
+    fetch("/api/profile/preferences")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const cur = data?.profile?.defaultCurrency
+        if (typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) {
+          setResidenceCurrency(cur)
+          setCurrency(cur) // claim defaults to residence currency
+        }
+      })
+      .catch(() => {})
+  }, [])
   const [exchangeRate, setExchangeRate] = useState(1)
   const [fxLoading, setFxLoading] = useState(false)
   const [startDate, setStartDate] = useState(today)
@@ -463,6 +525,11 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
     if (previewRate.rate <= 0) { setErr(`No rate configured for ${country}`); return }
     setBusy(true); setErr(null)
     try {
+      // Only send wire fields when the section is expanded — otherwise
+      // we'd persist empty strings and clutter the audit display.
+      const wireBody = wireOpen ? Object.fromEntries(
+        Object.entries(payout).filter(([, v]) => v && String(v).trim() !== "")
+      ) : {}
       const res = await fetch("/api/per-diem/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -473,6 +540,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           startDate,
           endDate,
           reason: reason || undefined,
+          ...wireBody,
           // Send each day with the typed amount as the override; legacy
           // travel-day / meal-deduction flags are always false in the new
           // simplified UI. Server stores amountOverride directly. The
@@ -525,8 +593,10 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
 
           {country && previewRate.rate > 0 && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-              Daily rate: <strong>{currency} {previewRate.rate.toFixed(2)}</strong>
-              {currency !== "USD" && (
+              Daily rate: <strong>{currency} {formatLocal(previewRate.rate, currency)}</strong>
+              {/* USD reference is only useful when the claim isn't in the
+                  residence currency (otherwise it's just noise). */}
+              {currency !== "USD" && currency !== residenceCurrency && (
                 <span className="ml-2 text-xs text-blue-700">
                   (USD {previewRateUSD.rate.toFixed(2)} × {exchangeRate.toFixed(4)}{fxLoading ? " …" : ""})
                 </span>
@@ -556,6 +626,74 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
             <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Reason / purpose (optional)</span>
             <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} placeholder="e.g. Q2 customer visits in Hanoi" className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
           </label>
+
+          {/* Foreign-wire payout override — only on per diem (other reimburse
+              flows always pay in residence currency). Collapsed by default
+              so most users don't see it; expand if you need a wire transfer
+              to a foreign account. */}
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setWireOpen((v) => !v)}
+              className="flex w-full items-center justify-between bg-gray-50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 hover:bg-gray-100"
+            >
+              <span>
+                Payout
+                {wireOpen ? " — international wire transfer" : ` — default (${residenceCurrency} to your on-file account)`}
+              </span>
+              <span className="text-gray-400">{wireOpen ? "▾" : "▸"}</span>
+            </button>
+            {wireOpen && (
+              <div className="space-y-3 border-t border-gray-200 p-4">
+                <p className="text-xs text-gray-500">
+                  Optional. Use this if you need finance to wire your per diem to a different bank account or in a different currency. Leave blank to receive payment in {residenceCurrency} to your on-file account.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Payout currency</span>
+                    <select
+                      value={payout.payoutCurrency}
+                      onChange={(e) => setPayout((p) => ({ ...p, payoutCurrency: e.target.value }))}
+                      className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    >
+                      <option value="">— same as claim ({currency}) —</option>
+                      {CURRENCY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Account holder name</span>
+                    <input value={payout.payoutAccountHolder} onChange={(e) => setPayout((p) => ({ ...p, payoutAccountHolder: e.target.value }))} maxLength={120} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Account number / IBAN</span>
+                  <input value={payout.payoutAccountNumber} onChange={(e) => setPayout((p) => ({ ...p, payoutAccountNumber: e.target.value }))} maxLength={60} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono" />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Bank name</span>
+                    <input value={payout.payoutBankName} onChange={(e) => setPayout((p) => ({ ...p, payoutBankName: e.target.value }))} maxLength={120} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                  </label>
+                  <label className="block">
+                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">SWIFT / BIC code</span>
+                    <input value={payout.payoutSwiftCode} onChange={(e) => setPayout((p) => ({ ...p, payoutSwiftCode: e.target.value.toUpperCase() }))} maxLength={20} placeholder="e.g. BMRIIDJA" className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono uppercase" />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Bank address</span>
+                  <input value={payout.payoutBankAddress} onChange={(e) => setPayout((p) => ({ ...p, payoutBankAddress: e.target.value }))} maxLength={300} placeholder="Often required for international wires" className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Routing number / sort code / IFSC (optional)</span>
+                  <input value={payout.payoutRoutingNumber} onChange={(e) => setPayout((p) => ({ ...p, payoutRoutingNumber: e.target.value }))} maxLength={40} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono" />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Notes for finance (optional)</span>
+                  <textarea rows={2} value={payout.payoutNotes} onChange={(e) => setPayout((p) => ({ ...p, payoutNotes: e.target.value }))} maxLength={1000} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                </label>
+              </div>
+            )}
+          </div>
 
           {/* Per-day meal grid */}
           {days.length > 0 && (

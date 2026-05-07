@@ -54,6 +54,17 @@ const Body = z.object({
   // currency; the chosen-currency totals are stored alongside.
   currency: z.string().regex(/^[A-Z]{3}$/).optional().default("USD"),
   days: z.array(DayInput).min(1).max(120),
+  // Optional foreign-currency / international wire transfer override.
+  // When the employee fills these in, finance pays them via wire to the
+  // named account in the named currency instead of the org's default flow.
+  payoutCurrency:      z.string().regex(/^[A-Z]{3}$/).optional(),
+  payoutAccountHolder: z.string().max(120).optional(),
+  payoutAccountNumber: z.string().max(60).optional(),
+  payoutBankName:      z.string().max(120).optional(),
+  payoutBankAddress:   z.string().max(300).optional(),
+  payoutSwiftCode:     z.string().max(20).optional(),
+  payoutRoutingNumber: z.string().max(40).optional(),
+  payoutNotes:         z.string().max(1000).optional(),
 })
 
 const MAX_TRIP_DAYS = 90
@@ -206,6 +217,14 @@ export async function POST(req: NextRequest) {
       totalAmountUSD,
       reason: reason ?? null,
       status: "PENDING",
+      payoutCurrency:      parsed.data.payoutCurrency      ?? null,
+      payoutAccountHolder: parsed.data.payoutAccountHolder ?? null,
+      payoutAccountNumber: parsed.data.payoutAccountNumber ?? null,
+      payoutBankName:      parsed.data.payoutBankName      ?? null,
+      payoutBankAddress:   parsed.data.payoutBankAddress   ?? null,
+      payoutSwiftCode:     parsed.data.payoutSwiftCode     ?? null,
+      payoutRoutingNumber: parsed.data.payoutRoutingNumber ?? null,
+      payoutNotes:         parsed.data.payoutNotes         ?? null,
       days: {
         createMany: {
           data: days.map((d, i) => ({

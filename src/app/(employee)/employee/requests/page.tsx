@@ -1083,13 +1083,22 @@ const PER_DIEM_COUNTRY_LABEL: Record<string, string> = {
 function PerDiemSection() {
   const [rows, setRows] = useState<PerDiemRow[]>([])
   const [loading, setLoading] = useState(true)
+  // Residence currency = UserProfile.defaultCurrency (falls back to IDR
+  // for this org). Used to decide whether the USD reference line is worth
+  // showing — when the claim currency matches residence, it's just noise.
+  const [residenceCurrency, setResidenceCurrency] = useState("IDR")
 
   useEffect(() => {
     let cancelled = false
-    fetch("/api/per-diem/request?scope=mine")
-      .then((r) => r.json())
-      .then((d) => { if (!cancelled) setRows(d.requests ?? []) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+    Promise.all([
+      fetch("/api/per-diem/request?scope=mine").then((r) => r.json()),
+      fetch("/api/profile/preferences").then((r) => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([d, p]) => {
+      if (cancelled) return
+      setRows(d.requests ?? [])
+      const cur = p?.profile?.defaultCurrency
+      if (typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) setResidenceCurrency(cur)
+    }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
 
@@ -1140,8 +1149,14 @@ function PerDiemSection() {
                 </td>
                 <td className="px-5 py-2.5 text-right tabular-nums">{r.totalDays}</td>
                 <td className="px-5 py-2.5 text-right tabular-nums font-medium text-gray-900">
-                  {r.currency} {Number(r.totalAmount).toFixed(2)}
-                  {r.currency !== "USD" && (
+                  {r.currency} {Number(r.totalAmount).toLocaleString(undefined, {
+                    minimumFractionDigits: ["IDR","VND","JPY","KRW"].includes(r.currency) ? 0 : 2,
+                    maximumFractionDigits: ["IDR","VND","JPY","KRW"].includes(r.currency) ? 0 : 2,
+                  })}
+                  {/* Skip the USD reference when the claim is already in
+                      the user's residence currency — that's the common case
+                      and the second line is just visual noise. */}
+                  {r.currency !== "USD" && r.currency !== residenceCurrency && (
                     <div className="text-[10px] font-normal text-gray-500">≈ USD {Number(r.totalAmountUSD).toFixed(2)}</div>
                   )}
                 </td>

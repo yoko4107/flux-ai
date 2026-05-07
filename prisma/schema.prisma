@@ -652,6 +652,21 @@ model PerDiemRequest {
   reason             String?       @db.Text
   supervisorNote     String?       @db.Text
   rejectionReason    String?       @db.Text
+  // Optional foreign-currency / international wire transfer details.
+  // Per diem (uniquely among the reimbursement flows) lets the employee
+  // route the payout to a specific bank account in a specific currency —
+  // useful when they're traveling and need cash on the ground in the
+  // local currency. All null = pay via the org's default flow in the
+  // user's residence currency (defined by UserProfile.defaultCurrency,
+  // falling back to Organization.baseCurrency).
+  payoutCurrency       String?     // ISO-4217 if overriding
+  payoutAccountHolder  String?
+  payoutAccountNumber  String?     // IBAN / account number — free form
+  payoutBankName       String?
+  payoutBankAddress    String?     // required for many SWIFT wires
+  payoutSwiftCode      String?     // SWIFT / BIC
+  payoutRoutingNumber  String?     // ABA / sort code / IFSC — region-specific
+  payoutNotes          String?     @db.Text
   approveToken       String?       @unique
   rejectToken        String?       @unique
   tokenExpiresAt     DateTime?

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Loader2, Plane, X, CheckCircle2, XCircle } from "lucide-react"
+import { Loader2, Plane, X, CheckCircle2, XCircle, Banknote } from "lucide-react"
 
 // Display overrides for destination country codes — keeps the UI consistent
 // with the employee + dashboard side ("SA" renders as "KSA").
@@ -10,6 +10,23 @@ const COUNTRY_LABEL: Record<string, string> = {
 }
 function fmtCountry(cc: string): string {
   return COUNTRY_LABEL[cc] ?? cc
+}
+
+function hasWirePayout(r: {
+  payoutCurrency: string | null
+  payoutAccountHolder: string | null
+  payoutAccountNumber: string | null
+  payoutBankName: string | null
+  payoutBankAddress: string | null
+  payoutSwiftCode: string | null
+  payoutRoutingNumber: string | null
+  payoutNotes: string | null
+}): boolean {
+  return !!(
+    r.payoutCurrency || r.payoutAccountHolder || r.payoutAccountNumber ||
+    r.payoutBankName || r.payoutBankAddress || r.payoutSwiftCode ||
+    r.payoutRoutingNumber || r.payoutNotes
+  )
 }
 
 type PerDiemRequest = {
@@ -26,6 +43,14 @@ type PerDiemRequest = {
   totalAmountUSD: string
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
   reason: string | null
+  payoutCurrency: string | null
+  payoutAccountHolder: string | null
+  payoutAccountNumber: string | null
+  payoutBankName: string | null
+  payoutBankAddress: string | null
+  payoutSwiftCode: string | null
+  payoutRoutingNumber: string | null
+  payoutNotes: string | null
   createdAt: string
   employee: { id: string; name: string | null; email: string | null }
   days: {
@@ -175,6 +200,68 @@ export default function ApproverPerDiemPage() {
                       ))}
                     </tbody>
                   </table>
+                )}
+
+                {/* Foreign-wire payout instructions, when the employee
+                    requested a different bank / currency. Always rendered
+                    (not behind the day-by-day toggle) so finance can see
+                    it at a glance. */}
+                {hasWirePayout(r) && (
+                  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm">
+                    <div className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-blue-900">
+                      <Banknote className="h-3.5 w-3.5" /> International wire transfer requested
+                    </div>
+                    <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-blue-900">
+                      {r.payoutCurrency && (
+                        <>
+                          <dt className="text-blue-700">Payout currency</dt>
+                          <dd className="font-medium">{r.payoutCurrency}</dd>
+                        </>
+                      )}
+                      {r.payoutAccountHolder && (
+                        <>
+                          <dt className="text-blue-700">Account holder</dt>
+                          <dd>{r.payoutAccountHolder}</dd>
+                        </>
+                      )}
+                      {r.payoutAccountNumber && (
+                        <>
+                          <dt className="text-blue-700">Account / IBAN</dt>
+                          <dd className="font-mono">{r.payoutAccountNumber}</dd>
+                        </>
+                      )}
+                      {r.payoutBankName && (
+                        <>
+                          <dt className="text-blue-700">Bank</dt>
+                          <dd>{r.payoutBankName}</dd>
+                        </>
+                      )}
+                      {r.payoutSwiftCode && (
+                        <>
+                          <dt className="text-blue-700">SWIFT / BIC</dt>
+                          <dd className="font-mono">{r.payoutSwiftCode}</dd>
+                        </>
+                      )}
+                      {r.payoutRoutingNumber && (
+                        <>
+                          <dt className="text-blue-700">Routing / sort / IFSC</dt>
+                          <dd className="font-mono">{r.payoutRoutingNumber}</dd>
+                        </>
+                      )}
+                      {r.payoutBankAddress && (
+                        <>
+                          <dt className="text-blue-700">Bank address</dt>
+                          <dd>{r.payoutBankAddress}</dd>
+                        </>
+                      )}
+                      {r.payoutNotes && (
+                        <>
+                          <dt className="text-blue-700">Notes</dt>
+                          <dd className="whitespace-pre-line">{r.payoutNotes}</dd>
+                        </>
+                      )}
+                    </dl>
+                  </div>
                 )}
               </div>
             )
