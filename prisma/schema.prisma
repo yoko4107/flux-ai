@@ -124,6 +124,13 @@ enum WorkLocationType {
   WFS
 }
 
+enum PerDiemStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 enum LeaveEmailType {
   REQUEST_SUBMITTED
   APPROVED
@@ -193,6 +200,7 @@ model Organization {
   workLocationLogs WorkLocationLog[]
   leaveBalanceAdjustments LeaveBalanceAdjustment[]
   companyEvents   CompanyEvent[]
+  perDiemRequests PerDiemRequest[]
 }
 
 model User {
@@ -230,6 +238,8 @@ model User {
   calendarTokens       CalendarToken[]
   leaveRequests        LeaveRequest[]   @relation("EmployeeLeave")
   supervisedLeaves     LeaveRequest[]   @relation("SupervisorLeave")
+  perDiemRequests      PerDiemRequest[] @relation("EmployeePerDiem")
+  supervisedPerDiems   PerDiemRequest[] @relation("SupervisorPerDiem")
   leaveProposals       LeaveProposal[]
   overtimeRecords      OvertimeRecord[] @relation("EmployeeOT")
   supervisedOvertime   OvertimeRecord[] @relation("SupervisorOT")
@@ -604,4 +614,67 @@ model WorkLocationLog {
 
   @@index([organizationId, date])
   @@index([employeeId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Business Per Diem
+// ---------------------------------------------------------------------------
+
+// One claim per trip; rates and per-day breakdown are frozen at submission
+// so subsequent admin changes to PerDiemRate config don't retroactively
+// affect already-submitted claims.
+model PerDiemRequest {
+  id                 String        @id @default(cuid())
+  organizationId     String
+  organization       Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId         String
+  employee           User          @relation("EmployeePerDiem", fields: [employeeId], references: [id])
+  supervisorId       String
+  supervisor         User          @relation("SupervisorPerDiem", fields: [supervisorId], references: [id])
+  destinationCountry String        // ISO-2: VN | ID | SA | …
+  destinationCity    String?
+  isHighCost         Boolean       @default(false)
+  startDate          DateTime
+  endDate            DateTime
+  totalDays          Int
+  // Total stored as Decimal so floating-point math doesn't drift. All
+  // values are USD per the spec.
+  totalAmountUSD     Decimal       @db.Decimal(12, 2)
+  status             PerDiemStatus @default(PENDING)
+  reason             String?       @db.Text
+  supervisorNote     String?       @db.Text
+  rejectionReason    String?       @db.Text
+  approveToken       String?       @unique
+  rejectToken        String?       @unique
+  tokenExpiresAt     DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  days               PerDiemDay[]
+
+  @@index([organizationId, status])
+  @@index([employeeId, status])
+  @@index([supervisorId, status])
+  @@index([employeeId, startDate, endDate])
+}
+
+// One row per calendar day inside the trip — backs the "Meal Deductions"
+// grid in the UI. baseRateUSD is the rate at submission time; daily total
+// is computed via src/lib/per-diem.ts and re-checked server-side on every
+// write to avoid trusting the client.
+model PerDiemDay {
+  id                String          @id @default(cuid())
+  requestId         String
+  request           PerDiemRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  date              DateTime
+  baseRateUSD       Decimal         @db.Decimal(8, 2)
+  // True for the first and last day of the trip → 75% multiplier on the
+  // base before deductions (deductions still come off the FULL base).
+  isTravelDay       Boolean         @default(false)
+  breakfastProvided Boolean         @default(false)
+  lunchProvided     Boolean         @default(false)
+  dinnerProvided    Boolean         @default(false)
+  dailyTotalUSD     Decimal         @db.Decimal(8, 2)
+
+  @@unique([requestId, date])
+  @@index([requestId])
 }
