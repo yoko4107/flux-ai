@@ -14,19 +14,9 @@ import { Loader2, Plus, Plane, X, AlertCircle } from "lucide-react"
 type Rate = { standard: number; highCost?: number; highCostCities?: string[] }
 type RateTable = Record<string, Rate>
 
-type DayRow = {
-  date: string // YYYY-MM-DD
-  // Amount the employee is claiming for this day, in the chosen currency.
-  // Starts as null (blank input) — the user fills each day in. The
-  // country's daily rate is shown in the form's rate-preview banner so
-  // users have a reference, but no values are pre-populated. Submission
-  // is blocked until every day has a number entered.
-  amount: number | null
-  isTravelDay: boolean
-  breakfastProvided: boolean
-  lunchProvided: boolean
-  dinnerProvided: boolean
-}
+// The form no longer collects per-day amounts; the request total is the
+// sum of itemized lines. We still derive the trip's date list (from start
+// + end dates) so the items section can offer a date dropdown.
 
 // Currencies the form lets you submit in. IDR is the default (org's
 // payout currency); everything else is converted at submission via
@@ -444,9 +434,11 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
   const [wireOpen, setWireOpen] = useState(false)
   const [payout, setPayout] = useState<PayoutOverride>(EMPTY_PAYOUT)
 
-  // High-level category for the trip + optional itemized breakdown.
+  // High-level category for the trip + itemized breakdown (drives total).
   const [tripCategory, setTripCategory] = useState("BUSINESS_TRAVEL")
-  const [items, setItems] = useState<ItemRow[]>([])
+  const [items, setItems] = useState<ItemRow[]>([
+    { category: "MEALS", description: "", amount: null, date: "" },
+  ])
   function addItem() {
     setItems((prev) => [...prev, { category: "MEALS", description: "", amount: null, date: "" }])
   }
@@ -475,7 +467,6 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [reason, setReason] = useState("")
-  const [days, setDays] = useState<DayRow[]>([{ date: today, amount: null, isTravelDay: false, breakfastProvided: false, lunchProvided: false, dinnerProvided: false }])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -515,55 +506,30 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
     [previewRateUSD, exchangeRate]
   )
 
-  // Re-materialise the day grid whenever the date range changes. Each new
-  // day starts blank; surviving dates keep whatever amount the user typed.
-  useEffect(() => {
-    if (!startDate || !endDate || endDate < startDate) {
-      setDays([])
-      return
-    }
-    const newDays: DayRow[] = []
+  // Trip dates derived from start/end. Used by the items section's date
+  // dropdown so a user can tag an item to a specific day inside the trip.
+  const tripDates = useMemo(() => {
+    if (!startDate || !endDate || endDate < startDate) return [] as string[]
+    const out: string[] = []
     const cur = new Date(startDate + "T00:00:00Z")
     const end = new Date(endDate + "T00:00:00Z")
     while (cur <= end) {
-      const dStr = cur.toISOString().slice(0, 10)
-      const existing = days.find((d) => d.date === dStr)
-      newDays.push(existing ?? {
-        date: dStr,
-        amount: null,
-        isTravelDay: false,
-        breakfastProvided: false,
-        lunchProvided: false,
-        dinnerProvided: false,
-      })
+      out.push(cur.toISOString().slice(0, 10))
       cur.setUTCDate(cur.getUTCDate() + 1)
     }
-    setDays(newDays)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return out
   }, [startDate, endDate])
 
-  // Switching destination country / city / currency wipes any typed amounts
-  // because "150,000" means something completely different across currencies.
-  // Resetting to null forces the user to re-enter intentionally.
-  useEffect(() => {
-    setDays((prev) => prev.map((d) => ({ ...d, amount: null })))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [country, city, currency])
-
-  function setDayField<K extends keyof DayRow>(idx: number, key: K, value: DayRow[K]) {
-    setDays((prev) => prev.map((d, i) => (i === idx ? { ...d, [key]: value } : d)))
-  }
-
-  // Each day's amount is whatever the user typed; nulls treat as 0 in
-  // the running sum so the total updates as they fill in.
+  // Total = sum of items. Empty / null amounts treated as 0 so the running
+  // total updates as the user types. Submission requires at least one item
+  // with a description and a non-null amount.
   const total = useMemo(
-    () => Math.round(days.reduce((acc, d) => acc + (d.amount ?? 0), 0) * 100) / 100,
-    [days]
+    () => Math.round(items.reduce((acc, it) => acc + (it.amount ?? 0), 0) * 100) / 100,
+    [items]
   )
-
-  // Submission is blocked until every day has a number entered (≥0 is fine —
-  // a user might explicitly claim 0 for a fully-covered day).
-  const allDaysFilled = days.length > 0 && days.every((d) => d.amount != null && d.amount >= 0)
+  const itemsValid = items.length > 0 && items.every(
+    (it) => it.description.trim() !== "" && it.amount != null && it.amount >= 0
+  )
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -576,16 +542,20 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
       const wireBody = wireOpen ? Object.fromEntries(
         Object.entries(payout).filter(([, v]) => v && String(v).trim() !== "")
       ) : {}
-      // Drop empty itemized rows so a user clicking "+ Add item" then
-      // never typing doesn't pollute the audit trail.
+      // Filter empty rows defensively, even though the disabled-submit
+      // guard above should already have caught them.
       const cleanItems = items
-        .filter((it) => it.description.trim() !== "")
+        .filter((it) => it.description.trim() !== "" && it.amount != null)
         .map((it) => ({
           category: it.category,
           description: it.description.trim(),
-          amount: it.amount,
+          amount: it.amount as number,
           ...(it.date ? { date: it.date } : {}),
         }))
+      if (cleanItems.length === 0) {
+        setErr("Add at least one item with an amount before submitting")
+        return
+      }
       const res = await fetch("/api/per-diem/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -597,21 +567,10 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           endDate,
           reason: reason || undefined,
           category: tripCategory,
-          items: cleanItems.length > 0 ? cleanItems : undefined,
+          items: cleanItems,
           ...wireBody,
-          // Send each day with the typed amount as the override; legacy
-          // travel-day / meal-deduction flags are always false in the new
-          // simplified UI. Server stores amountOverride directly. The
-          // `allDaysFilled` guard above means d.amount is a number here,
-          // never null — fall back to 0 defensively for the type checker.
-          days: days.map((d) => ({
-            date: d.date,
-            isTravelDay: false,
-            breakfastProvided: false,
-            lunchProvided: false,
-            dinnerProvided: false,
-            amountOverride: d.amount ?? 0,
-          })),
+          // No days payload — items are now the source of truth for the
+          // total. Server still derives totalDays from the start/end dates.
         }),
       })
       const data = await res.json()
@@ -759,68 +718,13 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
             )}
           </div>
 
-          {/* Per-day meal grid */}
-          {days.length > 0 && (
-            <div className="rounded-xl border border-gray-200 overflow-hidden">
-              <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-600">
-                Daily amounts ({days.length} {days.length === 1 ? "day" : "days"})
-              </div>
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Date</th>
-                    <th className="px-4 py-2 text-right">Amount ({currency})</th>
-                    <th className="px-4 py-2 text-right">Preview</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {days.map((d, idx) => (
-                    <tr key={d.date}>
-                      <td className="px-4 py-2 tabular-nums">{fmtDate(d.date)}</td>
-                      <td className="px-4 py-2 text-right">
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          max="100000000"
-                          placeholder="0"
-                          value={d.amount ?? ""}
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            // Empty string → null (blank). Otherwise parse the number.
-                            setDayField(idx, "amount", raw === "" ? null : Number(raw))
-                          }}
-                          className="w-36 rounded border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-200"
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-gray-500">
-                        {d.amount == null ? "—" : `${currency} ${formatLocal(d.amount, currency)}`}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-gray-50">
-                    <td colSpan={2} className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Total</td>
-                    <td className="px-4 py-2 text-right tabular-nums font-semibold text-gray-900">{currency} {formatLocal(total, currency)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-              <p className="border-t border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
-                Enter the amount you're claiming for each day in {currency}. Reference: {currency} {formatLocal(previewRate.rate, currency)} / day for {COUNTRY_LABEL[country] ?? country}.
-              </p>
-            </div>
-          )}
-
-          {/* Itemized breakdown — optional, descriptive context for the
-              approver. Items don't change the request total (driven by the
-              daily amounts above); they just describe what the allowance
-              covered. Each item: category + description + optional amount
-              and date. */}
+          {/* Itemized breakdown drives the request total. Each item carries
+              a category + description + amount (in chosen currency) and an
+              optional date linking it to a specific trip day. */}
           <div className="rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-gray-600">
-                Itemized breakdown {items.length > 0 ? `(${items.length})` : "(optional)"}
+                Itemized breakdown {items.length > 0 ? `(${items.length} ${items.length === 1 ? "item" : "items"})` : ""}
               </span>
               <button
                 type="button"
@@ -832,7 +736,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
             </div>
             {items.length === 0 ? (
               <p className="px-4 py-3 text-xs text-gray-500">
-                Optional. Add line items (e.g. "Hotel, IDR 750.000" or "Taxi to airport") so approvers know what the per-diem covered.
+                Add at least one line item to claim per-diem (e.g. "Hotel, IDR 750.000" or "Taxi to airport"). Reference daily rate: {currency} {formatLocal(previewRate.rate, currency)} / day for {COUNTRY_LABEL[country] ?? country}.
               </p>
             ) : (
               <div className="divide-y divide-gray-100">
@@ -863,16 +767,17 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
                         className="mt-1 block w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
                       >
                         <option value="">trip-wide</option>
-                        {days.map((d) => <option key={d.date} value={d.date}>{fmtDate(d.date)}</option>)}
+                        {tripDates.map((d) => <option key={d} value={d}>{fmtDate(d)}</option>)}
                       </select>
                     </label>
                     <label className="md:col-span-2 block">
                       <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Amount ({currency})</span>
                       <input
+                        required
                         type="number" step="any" min="0" max="100000000"
                         value={it.amount ?? ""}
                         onChange={(e) => setItemField(idx, "amount", e.target.value === "" ? null : Number(e.target.value))}
-                        placeholder="optional"
+                        placeholder="0"
                         className="mt-1 block w-full rounded-lg border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums"
                       />
                     </label>
@@ -888,9 +793,10 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
                     </div>
                   </div>
                 ))}
-                <p className="border-t border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
-                  Items don't change the request total — they're context for the approver. The total above stays driven by the daily amounts.
-                </p>
+                <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-4 py-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-600">Total</span>
+                  <span className="tabular-nums text-sm font-semibold text-gray-900">{currency} {formatLocal(total, currency)}</span>
+                </div>
               </div>
             )}
           </div>
@@ -902,8 +808,8 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
           <button
             type="submit"
-            disabled={busy || previewRate.rate <= 0 || days.length === 0 || !allDaysFilled}
-            title={!allDaysFilled ? "Fill in an amount for every day before submitting" : ""}
+            disabled={busy || previewRate.rate <= 0 || !itemsValid}
+            title={!itemsValid ? "Add at least one item with a description and amount before submitting" : ""}
             className="inline-flex items-center gap-2 rounded-lg bg-[#0B1E3F] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           >
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

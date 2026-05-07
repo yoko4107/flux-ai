@@ -3,8 +3,6 @@ import { z } from "zod"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
-  calculateDayTotal,
-  calculateTotalPerDiem,
   daysBetween,
   getRateTable,
   rateForDestination,
@@ -53,7 +51,10 @@ const Body = z.object({
   // ISO-4217 currency for the claim. USD remains the canonical reporting
   // currency; the chosen-currency totals are stored alongside.
   currency: z.string().regex(/^[A-Z]{3}$/).optional().default("USD"),
-  days: z.array(DayInput).min(1).max(120),
+  // Legacy field — still accepted for back-compat, but the modern flow
+  // computes the total from `items` instead and skips creating PerDiemDay
+  // rows entirely.
+  days: z.array(DayInput).optional(),
   // Optional foreign-currency / international wire transfer override.
   // When the employee fills these in, finance pays them via wire to the
   // named account in the named currency instead of the org's default flow.
@@ -68,15 +69,16 @@ const Body = z.object({
   // High-level category for the trip — gives approvers a quick read on
   // what kind of expense this is. Free-form code; UI suggests common values.
   category: z.string().regex(/^[A-Z][A-Z0-9_]{1,30}$/).optional(),
-  // Optional itemized breakdown. Each item carries a category + free-text
-  // description; amount is optional and informational only — the request's
-  // total still comes from the per-day grid.
+  // Itemized breakdown — required, drives the request total. Each item
+  // carries a category + free-text description and a required amount in
+  // the chosen currency. Optional date links the item to a specific day
+  // inside the trip range.
   items: z.array(z.object({
     category: z.enum(["MEALS", "LODGING", "TRANSPORT", "INCIDENTAL", "COMMUNICATION", "OTHER"]).default("OTHER"),
     description: z.string().min(1).max(500),
-    amount: z.number().min(0).max(100_000_000).nullable().optional(),
+    amount: z.number().min(0).max(100_000_000),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  })).max(50).optional(),
+  })).min(1, "At least one item is required").max(50),
 })
 
 const MAX_TRIP_DAYS = 90
@@ -89,7 +91,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input", details: parsed.error.flatten() }, { status: 400 })
   }
-  const { destinationCountry, destinationCity, startDate, endDate, reason, days } = parsed.data
+  const { destinationCountry, destinationCity, startDate, endDate, reason } = parsed.data
+  const items = parsed.data.items
 
   const employee = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -114,17 +117,14 @@ export async function POST(req: NextRequest) {
   if (expected.length > MAX_TRIP_DAYS) {
     return NextResponse.json({ error: `Trip exceeds ${MAX_TRIP_DAYS} days. Split it into smaller claims.` }, { status: 400 })
   }
-  // Client must supply exactly one day entry per calendar day, in order.
-  if (days.length !== expected.length) {
-    return NextResponse.json(
-      { error: `Expected ${expected.length} day entries, got ${days.length}` },
-      { status: 400 }
-    )
-  }
-  for (let i = 0; i < expected.length; i++) {
-    if (days[i].date !== expected[i].toISOString().slice(0, 10)) {
+  // Item-level dates (when supplied) must fall inside the trip range —
+  // otherwise an item could be linked to a day that isn't part of the trip.
+  for (const it of items) {
+    if (!it.date) continue
+    const d = utcDate(it.date)
+    if (d < start || d > end) {
       return NextResponse.json(
-        { error: `Day ${i + 1} should be ${expected[i].toISOString().slice(0, 10)}, got ${days[i].date}` },
+        { error: `Item date ${it.date} falls outside the trip range ${startDate} → ${endDate}` },
         { status: 400 }
       )
     }
@@ -151,7 +151,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Resolve the rate at submission time and freeze it on each PerDiemDay.
+  // Resolve the policy rate (informational only now — items drive the
+  // total). Captures the destination's high-cost flag and the FX rate at
+  // submission so the stored claim is reproducible.
   const rates = await getRateTable(employee.organizationId)
   const { rate: baseRateUSD, isHighCost } = rateForDestination(rates, destinationCountry, destinationCity)
   if (baseRateUSD <= 0) {
@@ -161,56 +163,18 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Convert the policy USD rate into the chosen claim currency. exchangeRate
-  // expresses 1 USD = N chosen-currency units, captured at submission so
-  // subsequent FX moves don't retroactively alter approved claims.
   const currency = parsed.data.currency.toUpperCase()
   const conv = await convert(baseRateUSD, "USD", currency)
-  const baseRateInCurrency = conv.amountBase
-  // exchangeRate stored as USD→target so 1 unit USD costs N target.
+  // 1 USD = exchangeRate target-currency units. Frozen on the request so
+  // subsequent FX moves don't retroactively alter approved claims.
   const exchangeRate = conv.exchangeRate
 
-  // Run the canonical calculator twice: once in the chosen currency (what
-  // the user sees) and once in USD (canonical reporting). Per-day overrides
-  // are entered in the chosen currency; the USD column is derived back.
-  const dayInputsCurrency = days.map((d) => ({
-    baseRateUSD: baseRateInCurrency,
-    isTravelDay: d.isTravelDay,
-    breakfastProvided: d.breakfastProvided,
-    lunchProvided: d.lunchProvided,
-    dinnerProvided: d.dinnerProvided,
-    amountOverride: d.amountOverride ?? null,
-  }))
-  const dayTotalsCurrency = dayInputsCurrency.map((d) => calculateDayTotal(d))
-  const totalAmount = calculateTotalPerDiem(dayInputsCurrency)
-
-  // Build the USD inputs by either:
-  //   - converting the override back from chosen-currency → USD, OR
-  //   - re-running the formula in USD (no override on that day).
-  const dayInputsUSD = days.map((d) => {
-    if (d.amountOverride != null && d.amountOverride >= 0) {
-      // We can't async-convert per day cheaply; use the same exchangeRate
-      // we already captured (1 USD = exchangeRate target, so 1 target = 1 / exchangeRate USD).
-      const usdOverride = exchangeRate > 0 ? d.amountOverride / exchangeRate : d.amountOverride
-      return {
-        baseRateUSD,
-        isTravelDay: d.isTravelDay,
-        breakfastProvided: d.breakfastProvided,
-        lunchProvided: d.lunchProvided,
-        dinnerProvided: d.dinnerProvided,
-        amountOverride: Math.round(usdOverride * 100) / 100,
-      }
-    }
-    return {
-      baseRateUSD,
-      isTravelDay: d.isTravelDay,
-      breakfastProvided: d.breakfastProvided,
-      lunchProvided: d.lunchProvided,
-      dinnerProvided: d.dinnerProvided,
-    }
-  })
-  const dayTotalsUSD = dayInputsUSD.map((d) => calculateDayTotal(d))
-  const totalAmountUSD = calculateTotalPerDiem(dayInputsUSD)
+  // Total comes straight from items now. Round to 2 decimals to avoid
+  // floating-point drift sneaking into Decimal storage.
+  const totalAmount = Math.round(items.reduce((acc, it) => acc + it.amount, 0) * 100) / 100
+  const totalAmountUSD = exchangeRate > 0
+    ? Math.round((totalAmount / exchangeRate) * 100) / 100
+    : totalAmount
 
   const created = await prisma.perDiemRequest.create({
     data: {
@@ -238,37 +202,22 @@ export async function POST(req: NextRequest) {
       payoutRoutingNumber: parsed.data.payoutRoutingNumber ?? null,
       payoutNotes:         parsed.data.payoutNotes         ?? null,
       category:            parsed.data.category            ?? "BUSINESS_TRAVEL",
-      days: {
+      // Items are required and drive the total. PerDiemDay rows are no
+      // longer created — older claims may still have them, but new claims
+      // are item-only.
+      items: {
         createMany: {
-          data: days.map((d, i) => ({
-            date: utcDate(d.date),
-            baseRate: baseRateInCurrency,
-            baseRateUSD,
-            isTravelDay: d.isTravelDay,
-            breakfastProvided: d.breakfastProvided,
-            lunchProvided: d.lunchProvided,
-            dinnerProvided: d.dinnerProvided,
-            dailyTotal: dayTotalsCurrency[i],
-            dailyTotalUSD: dayTotalsUSD[i],
-            isOverride: d.amountOverride != null && d.amountOverride >= 0,
-          })),
-        },
-      },
-      items: parsed.data.items && parsed.data.items.length > 0 ? {
-        createMany: {
-          data: parsed.data.items.map((it) => ({
+          data: items.map((it) => ({
             category: it.category,
             description: it.description,
-            amount: typeof it.amount === "number" ? it.amount : null,
-            // Convert item amounts to USD using the same rate captured for
-            // the request. Keeps cross-org reporting coherent.
-            amountUSD: typeof it.amount === "number" && exchangeRate > 0
+            amount: it.amount,
+            amountUSD: exchangeRate > 0
               ? Math.round((it.amount / exchangeRate) * 100) / 100
               : null,
             date: it.date ? utcDate(it.date) : null,
           })),
         },
-      } : undefined,
+      },
     },
     include: {
       days: { orderBy: { date: "asc" } },
