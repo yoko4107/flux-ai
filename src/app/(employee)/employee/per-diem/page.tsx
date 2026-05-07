@@ -100,6 +100,30 @@ interface PayoutOverride {
   payoutRoutingNumber: string
   payoutNotes: string
 }
+
+type ItemCategory = "MEALS" | "LODGING" | "TRANSPORT" | "INCIDENTAL" | "COMMUNICATION" | "OTHER"
+interface ItemRow {
+  category: ItemCategory
+  description: string
+  amount: number | null
+  date: string // YYYY-MM-DD or "" for trip-wide
+}
+const ITEM_CATEGORIES: { value: ItemCategory; label: string }[] = [
+  { value: "MEALS", label: "Meals" },
+  { value: "LODGING", label: "Lodging" },
+  { value: "TRANSPORT", label: "Transport" },
+  { value: "INCIDENTAL", label: "Incidentals" },
+  { value: "COMMUNICATION", label: "Communication" },
+  { value: "OTHER", label: "Other" },
+]
+
+const REQUEST_CATEGORIES = [
+  { value: "BUSINESS_TRAVEL", label: "Business travel" },
+  { value: "CONFERENCE", label: "Conference" },
+  { value: "CLIENT_VISIT", label: "Client visit" },
+  { value: "TRAINING", label: "Training" },
+  { value: "OTHER", label: "Other" },
+]
 const EMPTY_PAYOUT: PayoutOverride = {
   payoutCurrency: "",
   payoutAccountHolder: "",
@@ -411,6 +435,19 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
   const [wireOpen, setWireOpen] = useState(false)
   const [payout, setPayout] = useState<PayoutOverride>(EMPTY_PAYOUT)
 
+  // High-level category for the trip + optional itemized breakdown.
+  const [tripCategory, setTripCategory] = useState("BUSINESS_TRAVEL")
+  const [items, setItems] = useState<ItemRow[]>([])
+  function addItem() {
+    setItems((prev) => [...prev, { category: "MEALS", description: "", amount: null, date: "" }])
+  }
+  function setItemField<K extends keyof ItemRow>(idx: number, key: K, value: ItemRow[K]) {
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, [key]: value } : it)))
+  }
+  function removeItem(idx: number) {
+    setItems((prev) => prev.filter((_, i) => i !== idx))
+  }
+
   // Pull the residence currency once on mount.
   useEffect(() => {
     fetch("/api/profile/preferences")
@@ -530,6 +567,16 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
       const wireBody = wireOpen ? Object.fromEntries(
         Object.entries(payout).filter(([, v]) => v && String(v).trim() !== "")
       ) : {}
+      // Drop empty itemized rows so a user clicking "+ Add item" then
+      // never typing doesn't pollute the audit trail.
+      const cleanItems = items
+        .filter((it) => it.description.trim() !== "")
+        .map((it) => ({
+          category: it.category,
+          description: it.description.trim(),
+          amount: it.amount,
+          ...(it.date ? { date: it.date } : {}),
+        }))
       const res = await fetch("/api/per-diem/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -540,6 +587,8 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           startDate,
           endDate,
           reason: reason || undefined,
+          category: tripCategory,
+          items: cleanItems.length > 0 ? cleanItems : undefined,
           ...wireBody,
           // Send each day with the typed amount as the override; legacy
           // travel-day / meal-deduction flags are always false in the new
@@ -571,7 +620,13 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
         </div>
 
         <div className="space-y-4 p-5">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <label className="block">
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Type</span>
+              <select value={tripCategory} onChange={(e) => setTripCategory(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                {REQUEST_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </label>
             <label className="block">
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Country</span>
               <select required value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
@@ -747,6 +802,89 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
               </p>
             </div>
           )}
+
+          {/* Itemized breakdown — optional, descriptive context for the
+              approver. Items don't change the request total (driven by the
+              daily amounts above); they just describe what the allowance
+              covered. Each item: category + description + optional amount
+              and date. */}
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-600">
+                Itemized breakdown {items.length > 0 ? `(${items.length})` : "(optional)"}
+              </span>
+              <button
+                type="button"
+                onClick={addItem}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs hover:bg-gray-50"
+              >
+                + Add item
+              </button>
+            </div>
+            {items.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-gray-500">
+                Optional. Add line items (e.g. "Hotel, IDR 750.000" or "Taxi to airport") so approvers know what the per-diem covered.
+              </p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {items.map((it, idx) => (
+                  <div key={idx} className="grid grid-cols-1 gap-2 p-3 md:grid-cols-12">
+                    <label className="md:col-span-2 block">
+                      <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Category</span>
+                      <select value={it.category} onChange={(e) => setItemField(idx, "category", e.target.value as ItemCategory)} className="mt-1 block w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm">
+                        {ITEM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="md:col-span-5 block">
+                      <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Description</span>
+                      <input
+                        required
+                        value={it.description}
+                        onChange={(e) => setItemField(idx, "description", e.target.value)}
+                        maxLength={500}
+                        placeholder="e.g. Dinner at client meeting"
+                        className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2 block">
+                      <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Date (optional)</span>
+                      <select
+                        value={it.date}
+                        onChange={(e) => setItemField(idx, "date", e.target.value)}
+                        className="mt-1 block w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                      >
+                        <option value="">trip-wide</option>
+                        {days.map((d) => <option key={d.date} value={d.date}>{d.date}</option>)}
+                      </select>
+                    </label>
+                    <label className="md:col-span-2 block">
+                      <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Amount ({currency})</span>
+                      <input
+                        type="number" step="any" min="0" max="100000000"
+                        value={it.amount ?? ""}
+                        onChange={(e) => setItemField(idx, "amount", e.target.value === "" ? null : Number(e.target.value))}
+                        placeholder="optional"
+                        className="mt-1 block w-full rounded-lg border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums"
+                      />
+                    </label>
+                    <div className="md:col-span-1 flex items-end justify-end">
+                      <button
+                        type="button"
+                        onClick={() => removeItem(idx)}
+                        className="rounded p-1.5 text-red-500 hover:bg-red-50"
+                        title="Remove item"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <p className="border-t border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
+                  Items don't change the request total — they're context for the approver. The total above stays driven by the daily amounts.
+                </p>
+              </div>
+            )}
+          </div>
 
           {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
         </div>

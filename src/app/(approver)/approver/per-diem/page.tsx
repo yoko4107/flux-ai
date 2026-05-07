@@ -51,6 +51,16 @@ type PerDiemRequest = {
   payoutSwiftCode: string | null
   payoutRoutingNumber: string | null
   payoutNotes: string | null
+  category: string | null
+  items?: {
+    id: string
+    category: string
+    description: string
+    amount: string | null
+    amountUSD: string | null
+    date: string | null
+    createdAt: string
+  }[]
   createdAt: string
   employee: { id: string; name: string | null; email: string | null }
   days: {
@@ -144,6 +154,11 @@ export default function ApproverPerDiemPage() {
                       <span className="font-medium text-gray-900">{r.employee.name ?? r.employee.email}</span>
                       <span className="text-sm text-gray-500">· {where}</span>
                       {r.isHighCost && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-800">High-cost</span>}
+                      {r.category && r.category !== "BUSINESS_TRAVEL" && (
+                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-700">
+                          {r.category.toLowerCase().replace(/_/g, " ")}
+                        </span>
+                      )}
                       <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_COLOR[r.status]}`}>{r.status.toLowerCase()}</span>
                     </div>
                     <div className="text-sm text-gray-700">
@@ -200,6 +215,42 @@ export default function ApproverPerDiemPage() {
                       ))}
                     </tbody>
                   </table>
+                )}
+
+                {/* Itemized breakdown — descriptive context the employee
+                    submitted. Doesn't affect the request total. */}
+                {r.items && r.items.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50/40 px-4 py-3 text-sm">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600">
+                      Itemized breakdown ({r.items.length})
+                    </div>
+                    <table className="min-w-full text-xs">
+                      <thead className="text-[10px] uppercase tracking-wider text-gray-500">
+                        <tr>
+                          <th className="px-2 py-1 text-left">Category</th>
+                          <th className="px-2 py-1 text-left">Description</th>
+                          <th className="px-2 py-1 text-left">Date</th>
+                          <th className="px-2 py-1 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {r.items.map((it) => (
+                          <tr key={it.id}>
+                            <td className="px-2 py-1">
+                              <span className="rounded bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-700 ring-1 ring-gray-200">
+                                {it.category.toLowerCase()}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1 text-gray-800">{it.description}</td>
+                            <td className="px-2 py-1 text-gray-500 tabular-nums">{it.date ? it.date.slice(0, 10) : "—"}</td>
+                            <td className="px-2 py-1 text-right tabular-nums text-gray-800">
+                              {it.amount != null ? `${r.currency} ${Number(it.amount).toFixed(2)}` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
 
                 {/* Foreign-wire payout instructions, when the employee

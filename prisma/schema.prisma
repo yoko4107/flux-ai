@@ -667,12 +667,16 @@ model PerDiemRequest {
   payoutSwiftCode      String?     // SWIFT / BIC
   payoutRoutingNumber  String?     // ABA / sort code / IFSC — region-specific
   payoutNotes          String?     @db.Text
+  // Optional category for the request as a whole — gives approvers a
+  // quick read on the trip's purpose without parsing the reason text.
+  category             String?     @default("BUSINESS_TRAVEL")
   approveToken       String?       @unique
   rejectToken        String?       @unique
   tokenExpiresAt     DateTime?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   days               PerDiemDay[]
+  items              PerDiemItem[]
 
   @@index([organizationId, status])
   @@index([employeeId, status])
@@ -710,5 +714,27 @@ model PerDiemDay {
   isOverride        Boolean         @default(false)
 
   @@unique([requestId, date])
+  @@index([requestId])
+}
+
+// Itemized breakdown of a per-diem claim. Optional, descriptive — the
+// request's totalAmount is still driven by the per-day grid above. These
+// rows give the approver / finance a structured "what did this allowance
+// cover" alongside the headline number, with an optional per-item amount
+// for back-of-envelope sanity checking.
+model PerDiemItem {
+  id          String         @id @default(cuid())
+  requestId   String
+  request     PerDiemRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  // MEALS | LODGING | TRANSPORT | INCIDENTAL | COMMUNICATION | OTHER
+  category    String         @default("OTHER")
+  description String         @db.Text
+  // Optional — when set, item is in the request's chosen currency.
+  amount      Decimal?       @db.Decimal(15, 2)
+  amountUSD   Decimal?       @db.Decimal(15, 2)
+  // Optional — links the item to a specific trip day for context.
+  date        DateTime?
+  createdAt   DateTime       @default(now())
+
   @@index([requestId])
 }

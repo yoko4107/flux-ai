@@ -65,6 +65,18 @@ const Body = z.object({
   payoutSwiftCode:     z.string().max(20).optional(),
   payoutRoutingNumber: z.string().max(40).optional(),
   payoutNotes:         z.string().max(1000).optional(),
+  // High-level category for the trip — gives approvers a quick read on
+  // what kind of expense this is. Free-form code; UI suggests common values.
+  category: z.string().regex(/^[A-Z][A-Z0-9_]{1,30}$/).optional(),
+  // Optional itemized breakdown. Each item carries a category + free-text
+  // description; amount is optional and informational only — the request's
+  // total still comes from the per-day grid.
+  items: z.array(z.object({
+    category: z.enum(["MEALS", "LODGING", "TRANSPORT", "INCIDENTAL", "COMMUNICATION", "OTHER"]).default("OTHER"),
+    description: z.string().min(1).max(500),
+    amount: z.number().min(0).max(100_000_000).nullable().optional(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  })).max(50).optional(),
 })
 
 const MAX_TRIP_DAYS = 90
@@ -225,6 +237,7 @@ export async function POST(req: NextRequest) {
       payoutSwiftCode:     parsed.data.payoutSwiftCode     ?? null,
       payoutRoutingNumber: parsed.data.payoutRoutingNumber ?? null,
       payoutNotes:         parsed.data.payoutNotes         ?? null,
+      category:            parsed.data.category            ?? "BUSINESS_TRAVEL",
       days: {
         createMany: {
           data: days.map((d, i) => ({
@@ -241,8 +254,26 @@ export async function POST(req: NextRequest) {
           })),
         },
       },
+      items: parsed.data.items && parsed.data.items.length > 0 ? {
+        createMany: {
+          data: parsed.data.items.map((it) => ({
+            category: it.category,
+            description: it.description,
+            amount: typeof it.amount === "number" ? it.amount : null,
+            // Convert item amounts to USD using the same rate captured for
+            // the request. Keeps cross-org reporting coherent.
+            amountUSD: typeof it.amount === "number" && exchangeRate > 0
+              ? Math.round((it.amount / exchangeRate) * 100) / 100
+              : null,
+            date: it.date ? utcDate(it.date) : null,
+          })),
+        },
+      } : undefined,
     },
-    include: { days: { orderBy: { date: "asc" } } },
+    include: {
+      days: { orderBy: { date: "asc" } },
+      items: { orderBy: { createdAt: "asc" } },
+    },
   })
 
   // Best-effort supervisor email + in-app notification.
@@ -286,6 +317,7 @@ export async function GET(req: NextRequest) {
       employee: { select: { id: true, name: true, email: true } },
       supervisor: { select: { id: true, name: true, email: true } },
       days: { orderBy: { date: "asc" } },
+      items: { orderBy: { createdAt: "asc" } },
     },
   })
   return NextResponse.json({ requests })
