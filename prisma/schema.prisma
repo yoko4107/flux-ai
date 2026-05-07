@@ -642,8 +642,9 @@ model PerDiemRequest {
   currency           String        @default("USD")
   // Rate captured at submission: 1 USD = N chosen-currency units.
   exchangeRate       Decimal       @default(1) @db.Decimal(15, 6)
-  // Total in the chosen currency.
-  totalAmount        Decimal       @db.Decimal(12, 2)
+  // Total in the chosen currency. Wide enough to fit 90 days × multi-million
+  // IDR / VND amounts without overflow.
+  totalAmount        Decimal       @db.Decimal(15, 2)
   // Total converted to USD — reporting reference, also used for cross-claim
   // overlap / budget checks where org-wide reporting standardises on USD.
   totalAmountUSD     Decimal       @db.Decimal(12, 2)
@@ -674,7 +675,10 @@ model PerDiemDay {
   request           PerDiemRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
   date              DateTime
   // Daily rate in the request's chosen currency (and USD reference).
-  baseRate          Decimal         @db.Decimal(8, 2)
+  // Chosen-currency column is wide because IDR/VND rates run into the
+  // millions per day; USD column stays tighter since USD daily rates
+  // are bounded by policy in the low thousands.
+  baseRate          Decimal         @db.Decimal(15, 2)
   baseRateUSD       Decimal         @db.Decimal(8, 2)
   // True for the first and last day of the trip → 75% multiplier on the
   // base before deductions (deductions still come off the FULL base).
@@ -683,7 +687,8 @@ model PerDiemDay {
   lunchProvided     Boolean         @default(false)
   dinnerProvided    Boolean         @default(false)
   // Daily totals — both currencies stored, dailyTotalUSD is the reference.
-  dailyTotal        Decimal         @db.Decimal(8, 2)
+  // Same widening rationale as baseRate above.
+  dailyTotal        Decimal         @db.Decimal(15, 2)
   dailyTotalUSD     Decimal         @db.Decimal(8, 2)
   // True when the employee manually set the day's amount instead of
   // accepting the calculated rate × scale × meal-deductions value.

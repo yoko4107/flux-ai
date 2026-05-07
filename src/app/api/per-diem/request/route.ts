@@ -39,7 +39,9 @@ const DayInput = z.object({
   dinnerProvided: z.boolean(),
   // Optional manual override of the day's amount (in the request's chosen
   // currency). When present, the formula is skipped for that day.
-  amountOverride: z.number().min(0).max(10_000).nullable().optional(),
+  // Cap is generous (100M) so IDR / VND amounts work — those currencies
+  // routinely run into the millions per day.
+  amountOverride: z.number().min(0).max(100_000_000).nullable().optional(),
 })
 
 const Body = z.object({
