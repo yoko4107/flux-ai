@@ -20,7 +20,7 @@ import {
   Mail,
   Palette,
   CalendarDays,
-  Plane,
+  Wallet,
 } from "lucide-react"
 
 type NavItem = {
@@ -39,6 +39,12 @@ const navItems: NavItem[] = [
     roles: ["EMPLOYEE"],
   },
   {
+    title: "Per Diem",
+    href: "/employee/per-diem",
+    icon: <Wallet className="h-4 w-4" />,
+    roles: ["EMPLOYEE"],
+  },
+  {
     title: "Reimburse Dashboard",
     href: "/employee/requests",
     icon: <FileText className="h-4 w-4" />,
@@ -48,12 +54,6 @@ const navItems: NavItem[] = [
     title: "Leave & Calendar",
     href: "/employee/leave",
     icon: <CalendarDays className="h-4 w-4" />,
-    roles: ["EMPLOYEE"],
-  },
-  {
-    title: "Per Diem",
-    href: "/employee/per-diem",
-    icon: <Plane className="h-4 w-4" />,
     roles: ["EMPLOYEE"],
   },
   // Approver
@@ -78,7 +78,7 @@ const navItems: NavItem[] = [
   {
     title: "Per Diem Approvals",
     href: "/approver/per-diem",
-    icon: <Plane className="h-4 w-4" />,
+    icon: <Wallet className="h-4 w-4" />,
     roles: ["APPROVER"],
   },
   // Finance
@@ -134,7 +134,7 @@ const navItems: NavItem[] = [
   {
     title: "Per Diem",
     href: "/admin/per-diem",
-    icon: <Plane className="h-4 w-4" />,
+    icon: <Wallet className="h-4 w-4" />,
     roles: ["ADMIN"],
   },
 ]

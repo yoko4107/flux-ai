@@ -28,6 +28,7 @@ import {
   Share2,
   Upload,
   ExternalLink,
+  Wallet,
 } from "lucide-react"
 import { format, isBefore } from "date-fns"
 import { Suspense } from "react"
@@ -205,6 +206,8 @@ function RequestsContent() {
           New Request
         </Link>
       </div>
+
+      <PerDiemSection />
 
       {/* Status filter */}
       <div className="flex gap-3 items-center flex-wrap">
@@ -1044,5 +1047,110 @@ export default function RequestsPage() {
         <RequestsContent />
       </Suspense>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Per-diem section (lives on the Reimburse Dashboard alongside the monthly
+// reimbursement folders). Compact list, links into /employee/per-diem for
+// the full grid + new-claim form.
+// ---------------------------------------------------------------------------
+
+type PerDiemRow = {
+  id: string
+  destinationCountry: string
+  destinationCity: string | null
+  startDate: string
+  endDate: string
+  totalDays: number
+  currency: string
+  totalAmount: string
+  totalAmountUSD: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
+}
+
+const PER_DIEM_STATUS_TONE: Record<PerDiemRow["status"], string> = {
+  PENDING: "bg-yellow-100 text-yellow-800",
+  APPROVED: "bg-green-100 text-green-800",
+  REJECTED: "bg-red-100 text-red-800",
+  CANCELLED: "bg-gray-100 text-gray-600",
+}
+
+function PerDiemSection() {
+  const [rows, setRows] = useState<PerDiemRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/per-diem/request?scope=mine")
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setRows(d.requests ?? []) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Hide the section entirely when there's nothing to show — keeps the
+  // dashboard clean for users who never travel.
+  if (loading) return null
+  if (rows.length === 0) return null
+
+  // Show the 5 most recent; "View all" links into the dedicated per-diem page.
+  const recent = rows.slice(0, 5)
+  const pendingCount = rows.filter((r) => r.status === "PENDING").length
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <div className="flex items-center gap-2">
+          <Wallet className="h-4 w-4 text-gray-500" />
+          <CardTitle className="text-base">My Per Diem Claims</CardTitle>
+          {pendingCount > 0 && (
+            <Badge variant="outline" className="ml-1 border-yellow-300 bg-yellow-50 text-yellow-800">
+              {pendingCount} pending
+            </Badge>
+          )}
+        </div>
+        <Link href="/employee/per-diem" className="text-xs text-blue-600 hover:underline">
+          View all →
+        </Link>
+      </CardHeader>
+      <CardContent className="px-0 pb-2 pt-0">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+            <tr>
+              <th className="px-5 py-2 text-left font-medium">Destination</th>
+              <th className="px-5 py-2 text-left font-medium">Dates</th>
+              <th className="px-5 py-2 text-right font-medium">Days</th>
+              <th className="px-5 py-2 text-right font-medium">Total</th>
+              <th className="px-5 py-2 text-left font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {recent.map((r) => (
+              <tr key={r.id} className="hover:bg-gray-50/60">
+                <td className="px-5 py-2.5 text-gray-900">
+                  {r.destinationCity ? `${r.destinationCity}, ` : ""}{r.destinationCountry}
+                </td>
+                <td className="px-5 py-2.5 text-gray-700 tabular-nums">
+                  {r.startDate.slice(0, 10)} → {r.endDate.slice(0, 10)}
+                </td>
+                <td className="px-5 py-2.5 text-right tabular-nums">{r.totalDays}</td>
+                <td className="px-5 py-2.5 text-right tabular-nums font-medium text-gray-900">
+                  {r.currency} {Number(r.totalAmount).toFixed(2)}
+                  {r.currency !== "USD" && (
+                    <div className="text-[10px] font-normal text-gray-500">≈ USD {Number(r.totalAmountUSD).toFixed(2)}</div>
+                  )}
+                </td>
+                <td className="px-5 py-2.5">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${PER_DIEM_STATUS_TONE[r.status]}`}>
+                    {r.status.toLowerCase()}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
   )
 }
