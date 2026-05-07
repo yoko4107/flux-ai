@@ -19,6 +19,7 @@ import {
   FileCheck,
   Mail,
   Palette,
+  CalendarDays,
 } from "lucide-react"
 
 type NavItem = {
@@ -31,15 +32,21 @@ type NavItem = {
 const navItems: NavItem[] = [
   // Employee
   {
-    title: "Chat",
+    title: "Reimbursement AI",
     href: "/employee",
     icon: <MessageSquare className="h-4 w-4" />,
     roles: ["EMPLOYEE"],
   },
   {
-    title: "My Requests",
+    title: "Reimburse Dashboard",
     href: "/employee/requests",
     icon: <FileText className="h-4 w-4" />,
+    roles: ["EMPLOYEE"],
+  },
+  {
+    title: "Leave & Calendar",
+    href: "/employee/leave",
+    icon: <CalendarDays className="h-4 w-4" />,
     roles: ["EMPLOYEE"],
   },
   // Approver
@@ -53,6 +60,12 @@ const navItems: NavItem[] = [
     title: "Approval Queue",
     href: "/approver/queue",
     icon: <CheckSquare className="h-4 w-4" />,
+    roles: ["APPROVER"],
+  },
+  {
+    title: "Leave Approvals",
+    href: "/approver/leave",
+    icon: <CalendarDays className="h-4 w-4" />,
     roles: ["APPROVER"],
   },
   // Finance
@@ -97,6 +110,12 @@ const navItems: NavItem[] = [
     title: "Configuration",
     href: "/admin/config",
     icon: <Settings className="h-4 w-4" />,
+    roles: ["ADMIN"],
+  },
+  {
+    title: "Leave & Calendar",
+    href: "/admin/leave",
+    icon: <CalendarDays className="h-4 w-4" />,
     roles: ["ADMIN"],
   },
 ]

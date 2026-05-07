@@ -73,6 +73,72 @@ enum InviteStatus {
   EXPIRED
 }
 
+// ---------------------------------------------------------------------------
+// Leave & Calendar module enums
+// ---------------------------------------------------------------------------
+
+enum CalendarProvider {
+  NONE
+  GOOGLE
+  LARK
+  OUTLOOK
+  APPLE_ICS
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  NEGOTIATING
+}
+
+enum ProposalStatus {
+  PENDING
+  AGREED
+  DISAGREED
+  SUPERSEDED
+  EXPIRED
+}
+
+enum ProposerRole {
+  SUPERVISOR
+  EMPLOYEE
+}
+
+enum OvertimeDayType {
+  WEEKDAY
+  WEEKEND
+  PUBLIC_HOLIDAY
+}
+
+enum OvertimeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WorkLocationType {
+  OFFICE
+  WFH
+  WFS
+}
+
+enum LeaveEmailType {
+  REQUEST_SUBMITTED
+  APPROVED
+  REJECTED
+  SUPERVISOR_PROPOSAL
+  EMPLOYEE_COUNTER
+  PROPOSAL_AGREED
+  PROPOSAL_DISAGREED
+  REMINDER_PENDING
+  REMINDER_LEAVE
+  TOKEN_EXPIRED
+  OVERTIME_REQUEST
+  OVERTIME_APPROVED
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -115,10 +181,18 @@ model Organization {
   industry  String?
   logoUrl   String?
   baseCurrency String @default("IDR")
+  countryCode String @default("ID")        // ISO-3166-1 alpha-2; drives default holidays
   createdAt DateTime @default(now())
   users     User[]
   invitations UserInvitation[]
   configs   AdminConfig[]
+  leaveTypes      LeaveType[]
+  leaveRequests   LeaveRequest[]
+  publicHolidays  PublicHoliday[]
+  overtimeRecords OvertimeRecord[]
+  workLocationLogs WorkLocationLog[]
+  leaveBalanceAdjustments LeaveBalanceAdjustment[]
+  companyEvents   CompanyEvent[]
 }
 
 model User {
@@ -151,6 +225,17 @@ model User {
   auditLogs            AuditLog[]
   monthlyReports       MonthlyReport[]
   configUpdates        AdminConfig[]
+  // Leave & calendar relations
+  profile              UserProfile?
+  calendarTokens       CalendarToken[]
+  leaveRequests        LeaveRequest[]   @relation("EmployeeLeave")
+  supervisedLeaves     LeaveRequest[]   @relation("SupervisorLeave")
+  leaveProposals       LeaveProposal[]
+  overtimeRecords      OvertimeRecord[] @relation("EmployeeOT")
+  supervisedOvertime   OvertimeRecord[] @relation("SupervisorOT")
+  workLocationLogs     WorkLocationLog[]
+  leaveBalanceAdjustments     LeaveBalanceAdjustment[] @relation("EmployeeAdj")
+  leaveBalanceAdjustmentsMade LeaveBalanceAdjustment[] @relation("AdjGrantedBy")
 }
 
 model ReimbursementRequest {
@@ -273,4 +358,250 @@ model UserInvitation {
   invitedById String
   invitedBy   User         @relation("InvitedBy", fields: [invitedById], references: [id])
   organization Organization? @relation(fields: [orgId], references: [id])
+}
+
+// ---------------------------------------------------------------------------
+// User profile & onboarding
+// ---------------------------------------------------------------------------
+
+model UserProfile {
+  id                  String           @id @default(cuid())
+  userId              String           @unique
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isOnboarded         Boolean          @default(false)
+  countryCode         String           @default("ID")
+  timezone            String           @default("Asia/Jakarta")
+  defaultCurrency     String           @default("IDR")
+  dateFormat          String           @default("DD/MM/YYYY")
+  weekStartsOn        Int              @default(1)
+  jobTitle            String?
+  phone               String?
+  photoUrl            String?
+  calendarProvider    CalendarProvider @default(NONE)
+  emailActionsEnabled Boolean          @default(true)
+  notifyOnLeaveStatus Boolean          @default(true)
+  notifyOnProposal    Boolean          @default(true)
+  notifyBeforeLeave   String?          @default("1d")
+  notifyInApp         Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+}
+
+model CalendarToken {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       CalendarProvider
+  accountEmail   String?
+  encryptedToken String           @db.Text
+  tokenExpiry    DateTime?
+  connectedAt    DateTime         @default(now())
+  lastSyncedAt   DateTime?
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([userId, provider])
+}
+
+// ---------------------------------------------------------------------------
+// Leave management
+// ---------------------------------------------------------------------------
+
+model LeaveType {
+  id               String   @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code             String   // SICK | PERSONAL | FAMILY | ANNUAL | MATERNITY | PATERNITY | BEREAVEMENT | COMPENSATORY
+  name             String
+  description      String?
+  colorHex         String   @default("#3B82F6")
+  maxDaysPerYear   Int?
+  requiresApproval Boolean  @default(true)
+  isPaid           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  requests         LeaveRequest[]
+  adjustments      LeaveBalanceAdjustment[]
+
+  @@unique([organizationId, code])
+}
+
+model LeaveRequest {
+  id                   String              @id @default(cuid())
+  organizationId       String
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId           String
+  employee             User                @relation("EmployeeLeave", fields: [employeeId], references: [id])
+  supervisorId         String
+  supervisor           User                @relation("SupervisorLeave", fields: [supervisorId], references: [id])
+  leaveTypeId          String
+  leaveType            LeaveType           @relation(fields: [leaveTypeId], references: [id])
+  startDate            DateTime
+  endDate              DateTime
+  totalDays            Float
+  isHalfDay            Boolean             @default(false)
+  halfDayPeriod        String?             // "AM" | "PM"
+  reason               String?             @db.Text
+  status               LeaveStatus         @default(PENDING)
+  supervisorNote       String?             @db.Text
+  adminNote            String?             @db.Text
+  rejectionReason      String?             @db.Text
+  calEventEmployeeId   String?
+  calEventSupervisorId String?
+  approveToken         String?             @unique
+  rejectToken          String?             @unique
+  tokenExpiresAt       DateTime?
+  negotiationRound     Int                 @default(0)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  proposals            LeaveProposal[]
+  emailEvents          LeaveEmailEvent[]
+
+  @@index([organizationId, status])
+  @@index([employeeId, status])
+  @@index([supervisorId, status])
+}
+
+model LeaveProposal {
+  id              String           @id @default(cuid())
+  leaveRequestId  String
+  leaveRequest    LeaveRequest     @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  proposedById    String
+  proposedBy      User             @relation(fields: [proposedById], references: [id])
+  proposerRole    ProposerRole
+  proposedStart   DateTime
+  proposedEnd     DateTime
+  proposedDays    Float
+  message         String           @db.Text
+  status          ProposalStatus   @default(PENDING)
+  responseNote    String?          @db.Text
+  agreeToken      String?          @unique
+  disagreeToken   String?          @unique
+  tokenExpiresAt  DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([leaveRequestId, status])
+}
+
+model LeaveEmailEvent {
+  id             String         @id @default(cuid())
+  leaveRequestId String
+  leaveRequest   LeaveRequest   @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  toEmail        String
+  toUserId       String?
+  emailType      LeaveEmailType
+  subject        String
+  sentAt         DateTime       @default(now())
+  tokenUsedAt    DateTime?
+  actionTaken    String?        // "APPROVED" | "REJECTED" | "AGREED" | "DISAGREED" | "EXPIRED" | "SUPERSEDED"
+
+  @@index([leaveRequestId, sentAt])
+}
+
+model PublicHoliday {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  date           DateTime
+  countryCode    String
+  isRecurring    Boolean  @default(true)
+  type           String   @default("NATIONAL")
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, date, countryCode, name])
+  @@index([organizationId, date])
+}
+
+model OvertimeRecord {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       User            @relation("EmployeeOT", fields: [employeeId], references: [id])
+  supervisorId   String
+  supervisor     User            @relation("SupervisorOT", fields: [supervisorId], references: [id])
+  date           DateTime
+  hoursWorked    Float
+  dayType        OvertimeDayType
+  multiplier     Float
+  lieuDaysEarned Float
+  lieuExpiresAt  DateTime?
+  calEventId     String?
+  notes          String?         @db.Text
+  status         OvertimeStatus  @default(PENDING)
+  approveToken   String?         @unique
+  rejectToken    String?         @unique
+  tokenExpiresAt DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId, status])
+  @@index([employeeId, date])
+}
+
+// Manual per-employee, per-leave-type, per-year balance adjustment.
+// Positive `days` = extra allowance (e.g. mid-year hire prorated grant);
+// negative = clawback. Summed in /api/leave/balance/[userId].
+model LeaveBalanceAdjustment {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       User     @relation("EmployeeAdj", fields: [employeeId], references: [id])
+  leaveTypeId    String
+  leaveType      LeaveType @relation(fields: [leaveTypeId], references: [id])
+  year           Int
+  days           Float
+  reason         String   @db.Text
+  grantedById    String
+  grantedBy      User     @relation("AdjGrantedBy", fields: [grantedById], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, employeeId, year])
+  @@index([leaveTypeId, year])
+}
+
+// Org-scoped company / special events surfaced on the employee calendar.
+// All-day or timed; can span multiple days. Admins CRUD via the admin
+// console; everyone in the org can read.
+model CompanyEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?  @db.Text
+  startDate      DateTime
+  endDate        DateTime
+  allDay         Boolean  @default(true)
+  category       String   @default("COMPANY")  // COMPANY | SPECIAL | TRAINING | OTHER
+  colorHex       String   @default("#22D3EE")
+  location       String?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, startDate])
+}
+
+model WorkLocationLog {
+  id              String           @id @default(cuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        User             @relation(fields: [employeeId], references: [id])
+  date            DateTime
+  locationType    WorkLocationType
+  locationName    String?
+  locationAddress String?
+  contactPhone    String?
+  contactEmail    String?
+  notes           String?          @db.Text
+  calEventId      String?
+  createdAt       DateTime         @default(now())
+
+  @@index([organizationId, date])
+  @@index([employeeId, date])
 }
