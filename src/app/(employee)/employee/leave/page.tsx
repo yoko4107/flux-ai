@@ -66,7 +66,8 @@ const STATUS_COLOR: Record<LeaveRequest["status"], string> = {
 
 function fmt(iso: string) {
   const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+  // Pin locale to avoid SSR / browser hydration mismatch.
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
 }
 
 export default function EmployeeLeavePage() {

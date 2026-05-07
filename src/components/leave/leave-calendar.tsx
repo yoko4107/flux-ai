@@ -45,11 +45,14 @@ function startOfWeek(d: Date) {
   const offset = (day + 6) % 7 // Mon=0, Sun=6
   return addDays(d, -offset)
 }
+// Pin to en-GB so server (Node) and client (browser) render the same
+// strings — avoids the React hydration mismatch you'd otherwise hit when
+// Node's default locale differs from the browser's.
 function fmt(d: Date) {
-  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
 }
 function fmtMonthYear(d: Date) {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+  return d.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
 }
 function sameUtcDay(a: Date, b: Date) {
   return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate()
@@ -541,8 +544,8 @@ function DayDetail({ date, events, onClose, onChanged, allowCancel, allowApprove
       >
         <div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white px-5 py-3">
           <div>
-            <div className="text-xs uppercase tracking-wider text-gray-500">{date.toLocaleDateString(undefined, { weekday: "long" })}</div>
-            <h3 className="text-lg font-semibold text-gray-900">{date.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}</h3>
+            <div className="text-xs uppercase tracking-wider text-gray-500">{date.toLocaleDateString("en-GB", { weekday: "long" })}</div>
+            <h3 className="text-lg font-semibold text-gray-900">{date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</h3>
           </div>
           <button onClick={onClose} className="rounded p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
         </div>

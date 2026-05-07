@@ -379,7 +379,10 @@ function RateSummary({ rates }: { rates: RateTable }) {
  */
 function formatLocal(amount: number, currency: string): string {
   const decimals = ZERO_DECIMAL_CURRENCIES.has(currency) ? 0 : 2
-  return amount.toLocaleString(CURRENCY_LOCALE[currency] ?? undefined, {
+  // Always pass an explicit locale string. Falling back to `undefined`
+  // resolves to the runtime's default, which differs between Node SSR
+  // and the browser → React hydration mismatch.
+  return amount.toLocaleString(CURRENCY_LOCALE[currency] ?? "en-US", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })

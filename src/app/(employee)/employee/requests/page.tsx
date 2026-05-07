@@ -1087,6 +1087,23 @@ function perDiemFmtDate(input: string | null | undefined): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : input
 }
 
+// Pin the locale per-currency. Calling toLocaleString with `undefined`
+// resolves to the runtime's default — which differs between Node (SSR)
+// and the browser, causing React hydration mismatches.
+const PER_DIEM_CURRENCY_LOCALE: Record<string, string> = {
+  IDR: "id-ID", VND: "vi-VN", JPY: "ja-JP", KRW: "ko-KR",
+  USD: "en-US", GBP: "en-GB", AUD: "en-AU", SGD: "en-SG",
+  EUR: "de-DE", CHF: "de-CH",
+}
+const PER_DIEM_ZERO_DECIMAL = new Set(["IDR", "VND", "JPY", "KRW"])
+function perDiemFormatAmount(amount: number, currency: string): string {
+  const decimals = PER_DIEM_ZERO_DECIMAL.has(currency) ? 0 : 2
+  return amount.toLocaleString(PER_DIEM_CURRENCY_LOCALE[currency] ?? "en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}
+
 function PerDiemSection() {
   const [rows, setRows] = useState<PerDiemRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -1156,10 +1173,7 @@ function PerDiemSection() {
                 </td>
                 <td className="px-5 py-2.5 text-right tabular-nums">{r.totalDays}</td>
                 <td className="px-5 py-2.5 text-right tabular-nums font-medium text-gray-900">
-                  {r.currency} {Number(r.totalAmount).toLocaleString(undefined, {
-                    minimumFractionDigits: ["IDR","VND","JPY","KRW"].includes(r.currency) ? 0 : 2,
-                    maximumFractionDigits: ["IDR","VND","JPY","KRW"].includes(r.currency) ? 0 : 2,
-                  })}
+                  {r.currency} {perDiemFormatAmount(Number(r.totalAmount), r.currency)}
                   {/* Skip the USD reference when the claim is already in
                       the user's residence currency — that's the common case
                       and the second line is just visual noise. */}
