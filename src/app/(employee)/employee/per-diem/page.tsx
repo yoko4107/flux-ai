@@ -16,14 +16,16 @@ type RateTable = Record<string, Rate>
 
 type DayRow = {
   date: string // YYYY-MM-DD
+  // Amount the employee is claiming for this day, in the chosen currency.
+  // Defaults to the country's daily rate (converted to the chosen currency)
+  // when the day first materialises; user can edit. The legacy travel-day /
+  // meal-deduction flags still exist on the wire but are always false now —
+  // the server treats `amount` as a per-day override.
+  amount: number
   isTravelDay: boolean
   breakfastProvided: boolean
   lunchProvided: boolean
   dinnerProvided: boolean
-  // Manual override of the day's amount in the chosen currency. null
-  // means "use the calculated value"; a number replaces the formula
-  // result for that day.
-  amountOverride: number | null
 }
 
 // Currencies the form lets you submit in. IDR is the default (org's
@@ -87,18 +89,34 @@ const STATUS_COLOR: Record<PerDiemRequest["status"], string> = {
   CANCELLED: "bg-gray-100 text-gray-600",
 }
 
-// Mirrors lib/per-diem.ts so the live preview matches the server.
-// Override (when non-null) bypasses the formula entirely.
-const MEAL = { breakfast: 0.15, lunch: 0.25, dinner: 0.40 }
-function calcDay(rate: number, d: DayRow): number {
-  if (d.amountOverride != null && d.amountOverride >= 0) {
-    return Math.round(d.amountOverride * 100) / 100
-  }
-  const scaled = rate * (d.isTravelDay ? 0.75 : 1.0)
-  const ded = (d.breakfastProvided ? rate * MEAL.breakfast : 0)
-    + (d.lunchProvided ? rate * MEAL.lunch : 0)
-    + (d.dinnerProvided ? rate * MEAL.dinner : 0)
-  return Math.max(0, Math.round((scaled - ded) * 100) / 100)
+// Locale guess for currency formatting. Used by formatLocal() to render
+// "IDR 250.000" vs "USD 15,99" / "USD 15.99" in the way the user expects
+// for that currency's region.
+const CURRENCY_LOCALE: Record<string, string> = {
+  IDR: "id-ID",
+  VND: "vi-VN",
+  JPY: "ja-JP",
+  KRW: "ko-KR",
+  CNY: "zh-CN",
+  HKD: "zh-HK",
+  TWD: "zh-TW",
+  THB: "th-TH",
+  PHP: "en-PH",
+  MYR: "ms-MY",
+  SGD: "en-SG",
+  INR: "en-IN",
+  USD: "en-US",
+  CAD: "en-CA",
+  GBP: "en-GB",
+  AUD: "en-AU",
+  NZD: "en-NZ",
+  SAR: "ar-SA",
+  AED: "ar-AE",
+  EUR: "de-DE",
+  CHF: "de-CH",
+  SEK: "sv-SE",
+  NOK: "nb-NO",
+  DKK: "da-DK",
 }
 
 export default function EmployeePerDiemPage() {
@@ -276,11 +294,18 @@ function RateSummary({ rates }: { rates: RateTable }) {
   )
 }
 
-/** Locale-formatted display for a currency amount. Zero-decimal currencies
- *  (IDR, VND, JPY, KRW) drop the cents to look natural. */
+/** Locale-formatted display for a currency amount.
+ *
+ * Uses a per-currency locale (CURRENCY_LOCALE) so the thousands separator
+ * matches what users from that region expect — "IDR 250.000" / "VND 250.000"
+ * with dots, "USD 15.99" with a decimal point, "EUR 1.234,56" with the
+ * European convention, etc.
+ *
+ * Zero-decimal currencies (IDR, VND, JPY, KRW) drop the cents.
+ */
 function formatLocal(amount: number, currency: string): string {
   const decimals = ZERO_DECIMAL_CURRENCIES.has(currency) ? 0 : 2
-  return amount.toLocaleString(undefined, {
+  return amount.toLocaleString(CURRENCY_LOCALE[currency] ?? undefined, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
@@ -331,7 +356,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [reason, setReason] = useState("")
-  const [days, setDays] = useState<DayRow[]>([{ date: today, isTravelDay: true, breakfastProvided: false, lunchProvided: false, dinnerProvided: false, amountOverride: null }])
+  const [days, setDays] = useState<DayRow[]>([{ date: today, amount: 0, isTravelDay: false, breakfastProvided: false, lunchProvided: false, dinnerProvided: false }])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -371,8 +396,9 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
     [previewRateUSD, exchangeRate]
   )
 
-  // Re-materialise the day grid whenever the date range changes. Preserves
-  // user toggles + per-day overrides for any dates that survive the new range.
+  // Re-materialise the day grid whenever the date range changes. Each new
+  // day defaults to the current preview rate; surviving dates keep whatever
+  // amount the user typed.
   useEffect(() => {
     if (!startDate || !endDate || endDate < startDate) {
       setDays([])
@@ -383,34 +409,40 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
     const end = new Date(endDate + "T00:00:00Z")
     while (cur <= end) {
       const dStr = cur.toISOString().slice(0, 10)
-      const isFirst = newDays.length === 0
       const existing = days.find((d) => d.date === dStr)
       newDays.push(existing ?? {
         date: dStr,
-        isTravelDay: isFirst, // first auto-flagged; last patched below
+        amount: previewRate.rate,
+        isTravelDay: false,
         breakfastProvided: false,
         lunchProvided: false,
         dinnerProvided: false,
-        amountOverride: null,
       })
       cur.setUTCDate(cur.getUTCDate() + 1)
-    }
-    if (newDays.length >= 2) {
-      const last = newDays[newDays.length - 1]
-      const existingLast = days.find((d) => d.date === last.date)
-      last.isTravelDay = existingLast ? existingLast.isTravelDay : true
     }
     setDays(newDays)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, endDate])
 
+  // When the country / city / currency / FX rate changes, the preview rate
+  // changes too. Reset every day's amount to the new default — switching
+  // destination currencies fundamentally changes what "150,000" means, so
+  // overwriting is safer than keeping a stale number.
+  useEffect(() => {
+    if (previewRate.rate <= 0) return
+    setDays((prev) => prev.map((d) => ({ ...d, amount: previewRate.rate })))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewRate.rate])
+
   function setDayField<K extends keyof DayRow>(idx: number, key: K, value: DayRow[K]) {
     setDays((prev) => prev.map((d, i) => (i === idx ? { ...d, [key]: value } : d)))
   }
 
+  // Each day's amount is whatever the user typed (or the pre-filled
+  // country rate). Total = simple sum.
   const total = useMemo(
-    () => Math.round(days.reduce((acc, d) => acc + calcDay(previewRate.rate, d), 0) * 100) / 100,
-    [days, previewRate.rate]
+    () => Math.round(days.reduce((acc, d) => acc + (d.amount || 0), 0) * 100) / 100,
+    [days]
   )
 
   async function submit(e: React.FormEvent) {
@@ -429,7 +461,17 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           startDate,
           endDate,
           reason: reason || undefined,
-          days,
+          // Send each day with the typed amount as the override; legacy
+          // travel-day / meal-deduction flags are always false in the new
+          // simplified UI. Server stores amountOverride directly.
+          days: days.map((d) => ({
+            date: d.date,
+            isTravelDay: false,
+            breakfastProvided: false,
+            lunchProvided: false,
+            dinnerProvided: false,
+            amountOverride: d.amount,
+          })),
         }),
       })
       const data = await res.json()
@@ -505,67 +547,49 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           {days.length > 0 && (
             <div className="rounded-xl border border-gray-200 overflow-hidden">
               <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-600">
-                Meal deductions ({days.length} {days.length === 1 ? "day" : "days"})
+                Daily amounts ({days.length} {days.length === 1 ? "day" : "days"})
               </div>
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
                   <tr>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-center">Travel day<br/><span className="text-[9px] font-normal">(75%)</span></th>
-                    <th className="px-3 py-2 text-center">Breakfast<br/><span className="text-[9px] font-normal">(−15%)</span></th>
-                    <th className="px-3 py-2 text-center">Lunch<br/><span className="text-[9px] font-normal">(−25%)</span></th>
-                    <th className="px-3 py-2 text-center">Dinner<br/><span className="text-[9px] font-normal">(−40%)</span></th>
-                    <th className="px-3 py-2 text-right">Daily ({currency})</th>
+                    <th className="px-4 py-2 text-left">Date</th>
+                    <th className="px-4 py-2 text-right">Amount ({currency})</th>
+                    <th className="px-4 py-2 text-right">Preview</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {days.map((d, idx) => {
-                    const computed = calcDay(previewRate.rate, { ...d, amountOverride: null })
-                    const shown = d.amountOverride != null ? d.amountOverride : computed
-                    const isOverride = d.amountOverride != null
-                    return (
-                      <tr key={d.date}>
-                        <td className="px-3 py-1.5 tabular-nums">{d.date}</td>
-                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.isTravelDay} onChange={(e) => setDayField(idx, "isTravelDay", e.target.checked)} /></td>
-                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.breakfastProvided} disabled={isOverride} onChange={(e) => setDayField(idx, "breakfastProvided", e.target.checked)} /></td>
-                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.lunchProvided} disabled={isOverride} onChange={(e) => setDayField(idx, "lunchProvided", e.target.checked)} /></td>
-                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.dinnerProvided} disabled={isOverride} onChange={(e) => setDayField(idx, "dinnerProvided", e.target.checked)} /></td>
-                        <td className="px-3 py-1.5 text-right">
-                          <div className="inline-flex items-center gap-1">
-                            <input
-                              type="number" step="0.01" min="0" max="10000"
-                              value={shown.toFixed(2)}
-                              onChange={(e) => setDayField(idx, "amountOverride", Number(e.target.value))}
-                              className={`w-24 rounded border px-2 py-1 text-right text-sm tabular-nums ${
-                                isOverride ? "border-amber-300 bg-amber-50" : "border-gray-200"
-                              }`}
-                              title={isOverride ? `Manual override (calculated would be ${currency} ${computed.toFixed(2)})` : ""}
-                            />
-                            {isOverride && (
-                              <button
-                                type="button"
-                                onClick={() => setDayField(idx, "amountOverride", null)}
-                                className="rounded text-[10px] text-blue-600 hover:underline"
-                                title="Reset to calculated value"
-                              >
-                                ↺
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {days.map((d, idx) => (
+                    <tr key={d.date}>
+                      <td className="px-4 py-2 tabular-nums">{d.date}</td>
+                      <td className="px-4 py-2 text-right">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          max="100000000"
+                          value={d.amount}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? 0 : Number(e.target.value)
+                            setDayField(idx, "amount", v)
+                          }}
+                          className="w-36 rounded border border-gray-300 px-2 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-200"
+                        />
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-gray-700">
+                        {currency} {formatLocal(d.amount, currency)}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-50">
-                    <td colSpan={5} className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Total</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900">{currency} {total.toFixed(2)}</td>
+                    <td colSpan={2} className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Total</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-semibold text-gray-900">{currency} {formatLocal(total, currency)}</td>
                   </tr>
                 </tfoot>
               </table>
               <p className="border-t border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
-                Edit any daily amount directly to override the formula for that day. Click ↺ to revert.
+                Each day pre-fills with the country's daily rate ({currency} {formatLocal(previewRate.rate, currency)}). Edit any amount directly.
               </p>
             </div>
           )}
@@ -577,7 +601,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
           <button type="submit" disabled={busy || previewRate.rate <= 0 || days.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-[#0B1E3F] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Submit {currency} {total.toFixed(2)}
+            Submit {currency} {formatLocal(total, currency)}
           </button>
         </div>
       </form>
