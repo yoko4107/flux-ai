@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Type-check + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Prisma client is committed under src/generated/prisma but the
+      # `index.ts` shim isn't — recreate it before type-checking.
+      # generate doesn't connect to the DB; the dummy URL is just to satisfy
+      # prisma.config.ts's datasource block.
+      - name: Regenerate Prisma client
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+        run: |
+          npx prisma generate
+          echo 'export * from "./client"' > src/generated/prisma/index.ts
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run unit tests
+        run: npm test

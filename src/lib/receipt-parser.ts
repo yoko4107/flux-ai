@@ -66,8 +66,11 @@ export function detectCurrency(text: string): string | undefined {
 
 // Matches an amount token optionally preceded or followed by a currency symbol.
 // Captures the numeric raw string and (optionally) a currency marker on either side.
+// Used with a global flag in extractLineItems so we can scan a line for the
+// best candidate (prefer matches with a currency over bare numbers like the
+// "1" in "Trip 1 29.120₫").
 const LINE_AMOUNT_REGEX =
-  /(Rp\.?|S\$|RM|\$|€|£|¥|₹|₩|฿|₱|USD|IDR|SGD|MYR|EUR|GBP|JPY|CNY|INR|KRW|THB|PHP|VND)?\s*([\d]{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d{1,2})?)\s*(₫|đ|Rp\.?|S\$|RM|\$|€|£|¥|₹|₩|฿|₱|USD|IDR|SGD|MYR|EUR|GBP|JPY|CNY|INR|KRW|THB|PHP|VND)?/i
+  /(Rp\.?|S\$|RM|\$|€|£|¥|₹|₩|฿|₱|USD|IDR|SGD|MYR|EUR|GBP|JPY|CNY|INR|KRW|THB|PHP|VND)?\s*([\d]{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d{1,2})?)\s*(₫|đ|Rp\.?|S\$|RM|\$|€|£|¥|₹|₩|฿|₱|USD|IDR|SGD|MYR|EUR|GBP|JPY|CNY|INR|KRW|THB|PHP|VND)?/gi
 
 const SUMMARY_LINE =
   /^(sub\s*total|subtotal|total|grand\s*total|amount\s*due|tax|vat|ppn|service|tip|gratuity|discount|change|cash|credit|paid|balance|due|fee)\b/i
@@ -84,8 +87,13 @@ export function extractLineItems(text: string, defaultCurrency?: string): LineIt
     const line = lines[i]
     if (SUMMARY_LINE.test(line)) continue
 
-    const m = line.match(LINE_AMOUNT_REGEX)
-    if (!m) continue
+    // Find ALL amount candidates on this line, then prefer the one with an
+    // actual currency marker. This stops bare numbers (trip ids, order numbers,
+    // etc.) from shadowing the real total.
+    const matches = Array.from(line.matchAll(LINE_AMOUNT_REGEX))
+    if (matches.length === 0) continue
+    const withCurrency = matches.find((m) => m[1] || m[3])
+    const m = withCurrency ?? matches[0]
 
     const currencyHint = m[1] || m[3] || defaultCurrency
     const amount = parseNumericAmount(m[2], currencyHint)
@@ -102,7 +110,10 @@ export function extractLineItems(text: string, defaultCurrency?: string): LineIt
       .trim()
     if (description.length < 3 && i > 0) {
       const prev = lines[i - 1]
-      if (!SUMMARY_LINE.test(prev) && !LINE_AMOUNT_REGEX.test(prev)) {
+      // Re-test prev with the same regex via .match — keep the original
+      // /g state untouched.
+      const prevHasAmount = new RegExp(LINE_AMOUNT_REGEX.source, "i").test(prev)
+      if (!SUMMARY_LINE.test(prev) && !prevHasAmount) {
         description = prev
       }
     }
