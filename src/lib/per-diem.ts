@@ -67,11 +67,23 @@ export const FULL_DAY_MULTIPLIER = 1.0
 // ---------------------------------------------------------------------------
 
 export interface DayInputs {
+  /**
+   * Daily base rate in whatever currency the calculation runs in.
+   * Field name kept as `baseRateUSD` for backwards compatibility with
+   * the original USD-only spec — the math is currency-agnostic.
+   */
   baseRateUSD: number
   isTravelDay: boolean
   breakfastProvided: boolean
   lunchProvided: boolean
   dinnerProvided: boolean
+  /**
+   * Optional manual override. When set (>= 0), the calculator skips the
+   * scaled-base − deductions math and uses this number directly. Used by
+   * the per-day "edit amount" feature so an employee can claim a different
+   * amount than the policy default for a specific day.
+   */
+  amountOverride?: number | null
 }
 
 /** Round to 2 decimal places (avoid floating-point drift for storage). */
@@ -80,6 +92,9 @@ function round2(n: number): number {
 }
 
 export function calculateDayTotal(d: DayInputs): number {
+  if (typeof d.amountOverride === "number" && d.amountOverride >= 0) {
+    return round2(d.amountOverride)
+  }
   const scaled = d.baseRateUSD * (d.isTravelDay ? TRAVEL_DAY_MULTIPLIER : FULL_DAY_MULTIPLIER)
   const deductions =
     (d.breakfastProvided ? d.baseRateUSD * MEAL_DEDUCTIONS.breakfast : 0) +

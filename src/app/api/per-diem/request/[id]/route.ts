@@ -93,6 +93,8 @@ async function notifyDecision(
     destinationCity: string | null
     startDate: Date
     endDate: Date
+    currency: string
+    totalAmount: { toString: () => string }
     totalAmountUSD: { toString: () => string }
     organization: { name: string } | null
   },
@@ -101,6 +103,7 @@ async function notifyDecision(
   rejectionReason?: string
 ) {
   const where = claim.destinationCity ? `${claim.destinationCity}, ${claim.destinationCountry}` : claim.destinationCountry
+  const amountStr = `${claim.currency} ${claim.totalAmount.toString()}`
 
   // In-app
   try {
@@ -110,7 +113,7 @@ async function notifyDecision(
     })
     if (profile?.notifyInApp ?? true) {
       const msg = decision === "APPROVED"
-        ? `Your per diem for ${where} ($${claim.totalAmountUSD.toString()}) was approved`
+        ? `Your per diem for ${where} (${amountStr}) was approved`
         : `Your per diem for ${where} was not approved`
       await prisma.notification.create({
         data: {
@@ -133,18 +136,21 @@ async function notifyDecision(
     const { Resend } = await import("resend")
     const resend = new Resend(apiKey)
     const portal = `${process.env.APP_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:3000"}/employee/per-diem`
+    const totalLine = claim.currency === "USD"
+      ? `USD ${claim.totalAmount.toString()}`
+      : `${claim.currency} ${claim.totalAmount.toString()} (≈ USD ${claim.totalAmountUSD.toString()})`
     if (decision === "APPROVED") {
       await resend.emails.send({
         from: process.env.LEAVE_EMAIL_FROM || "FLUX.AI <noreply@flux.ai>",
         to: claim.employee.email,
         replyTo: claim.supervisor.email ?? undefined,
-        subject: `Per diem approved: ${where} — $${claim.totalAmountUSD.toString()}`,
+        subject: `Per diem approved: ${where} — ${totalLine.split(" (")[0]}`,
         html: `<p>Hi ${claim.employee.name ?? ""},</p>
 <p>Your per diem claim has been approved.</p>
 <ul>
   <li><strong>Destination:</strong> ${where}</li>
   <li><strong>Dates:</strong> ${claim.startDate.toISOString().slice(0, 10)} → ${claim.endDate.toISOString().slice(0, 10)}</li>
-  <li><strong>Total:</strong> $${claim.totalAmountUSD.toString()}</li>
+  <li><strong>Total:</strong> ${totalLine}</li>
 </ul>
 ${supervisorNote ? `<p><em>Note from your supervisor:</em> ${escapeHtml(supervisorNote)}</p>` : ""}
 <p><a href="${portal}">View in the portal →</a></p>`,

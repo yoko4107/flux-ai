@@ -55,6 +55,34 @@ describe("per-diem.calculateDayTotal", () => {
     expect(calculateDayTotal({ baseRateUSD: 115, isTravelDay: true, breakfastProvided: true, lunchProvided: false, dinnerProvided: false })).toBe(69)
   })
 
+  it("manual override bypasses the formula and is used as-is", () => {
+    // If override is set, breakfast/lunch/dinner/travel-day flags are
+    // ignored — the user is explicitly claiming a flat amount.
+    expect(calculateDayTotal({
+      baseRateUSD: 70, isTravelDay: true,
+      breakfastProvided: true, lunchProvided: true, dinnerProvided: true,
+      amountOverride: 25,
+    })).toBe(25)
+  })
+
+  it("override of 0 returns 0 (e.g. fully covered day)", () => {
+    expect(calculateDayTotal({
+      baseRateUSD: 70, isTravelDay: false,
+      breakfastProvided: false, lunchProvided: false, dinnerProvided: false,
+      amountOverride: 0,
+    })).toBe(0)
+  })
+
+  it("negative override falls back to formula (defensive)", () => {
+    // Negative is treated as "no override" so a typo doesn't yield a
+    // negative claim. Defaults back to scaled-base − deductions.
+    expect(calculateDayTotal({
+      baseRateUSD: 70, isTravelDay: false,
+      breakfastProvided: false, lunchProvided: false, dinnerProvided: false,
+      amountOverride: -5,
+    })).toBe(70)
+  })
+
   it("rounds to 2 decimals (no fractional cents from float math)", () => {
     // 33.333… inputs shouldn't leak floating-point noise into storage.
     // 33.33 * 0.75 = 24.9975; 33.33 * 0.25 = 8.3325; diff = 16.665 → 16.67.

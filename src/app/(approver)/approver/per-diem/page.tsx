@@ -11,6 +11,9 @@ type PerDiemRequest = {
   startDate: string
   endDate: string
   totalDays: number
+  currency: string
+  exchangeRate: string
+  totalAmount: string
   totalAmountUSD: string
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
   reason: string | null
@@ -19,12 +22,15 @@ type PerDiemRequest = {
   days: {
     id: string
     date: string
+    baseRate: string
     baseRateUSD: string
     isTravelDay: boolean
     breakfastProvided: boolean
     lunchProvided: boolean
     dinnerProvided: boolean
+    dailyTotal: string
     dailyTotalUSD: string
+    isOverride: boolean
   }[]
 }
 
@@ -107,7 +113,11 @@ export default function ApproverPerDiemPage() {
                       <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_COLOR[r.status]}`}>{r.status.toLowerCase()}</span>
                     </div>
                     <div className="text-sm text-gray-700">
-                      {r.startDate.slice(0,10)} → {r.endDate.slice(0,10)} · {r.totalDays} day{r.totalDays === 1 ? "" : "s"} · <strong>${Number(r.totalAmountUSD).toFixed(2)}</strong>
+                      {r.startDate.slice(0,10)} → {r.endDate.slice(0,10)} · {r.totalDays} day{r.totalDays === 1 ? "" : "s"} ·{" "}
+                      <strong>{r.currency} {Number(r.totalAmount).toFixed(2)}</strong>
+                      {r.currency !== "USD" && (
+                        <span className="ml-1 text-xs text-gray-500">(≈ USD {Number(r.totalAmountUSD).toFixed(2)})</span>
+                      )}
                     </div>
                     {r.reason && <div className="text-sm text-gray-600 italic">“{r.reason}”</div>}
                     <button onClick={() => setExpanded(isOpen ? null : r.id)} className="text-xs text-blue-600 hover:underline">
@@ -136,19 +146,22 @@ export default function ApproverPerDiemPage() {
                         <th className="px-3 py-1.5 text-center">Brk</th>
                         <th className="px-3 py-1.5 text-center">Lun</th>
                         <th className="px-3 py-1.5 text-center">Din</th>
-                        <th className="px-3 py-1.5 text-right">Daily (USD)</th>
+                        <th className="px-3 py-1.5 text-right">Daily ({r.currency})</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {r.days.map((d) => (
-                        <tr key={d.id}>
+                        <tr key={d.id} className={d.isOverride ? "bg-amber-50/50" : ""}>
                           <td className="px-3 py-1.5 tabular-nums">{d.date.slice(0,10)}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">${Number(d.baseRateUSD).toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">{r.currency} {Number(d.baseRate).toFixed(2)}</td>
                           <td className="px-3 py-1.5 text-center">{d.isTravelDay ? "✓" : "—"}</td>
                           <td className="px-3 py-1.5 text-center">{d.breakfastProvided ? "✓" : "—"}</td>
                           <td className="px-3 py-1.5 text-center">{d.lunchProvided ? "✓" : "—"}</td>
                           <td className="px-3 py-1.5 text-center">{d.dinnerProvided ? "✓" : "—"}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums">${Number(d.dailyTotalUSD).toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">
+                            {r.currency} {Number(d.dailyTotal).toFixed(2)}
+                            {d.isOverride && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-800">override</span>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

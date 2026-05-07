@@ -10,6 +10,7 @@ import {
   rateForDestination,
   utcDate,
 } from "@/lib/per-diem"
+import { convert } from "@/lib/fx-rates"
 
 // POST /api/per-diem/request
 // Employee submits a new per diem claim. Server resolves the daily rate,
@@ -36,6 +37,9 @@ const DayInput = z.object({
   breakfastProvided: z.boolean(),
   lunchProvided: z.boolean(),
   dinnerProvided: z.boolean(),
+  // Optional manual override of the day's amount (in the request's chosen
+  // currency). When present, the formula is skipped for that day.
+  amountOverride: z.number().min(0).max(10_000).nullable().optional(),
 })
 
 const Body = z.object({
@@ -44,6 +48,9 @@ const Body = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   reason: z.string().max(2000).optional(),
+  // ISO-4217 currency for the claim. USD remains the canonical reporting
+  // currency; the chosen-currency totals are stored alongside.
+  currency: z.string().regex(/^[A-Z]{3}$/).optional().default("USD"),
   days: z.array(DayInput).min(1).max(120),
 })
 
@@ -129,16 +136,56 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Re-run the canonical calculator server-side. We never trust a client
-  // total: meal selections are user input, math is ours.
-  const dayInputs = days.map((d) => ({
-    baseRateUSD,
+  // Convert the policy USD rate into the chosen claim currency. exchangeRate
+  // expresses 1 USD = N chosen-currency units, captured at submission so
+  // subsequent FX moves don't retroactively alter approved claims.
+  const currency = parsed.data.currency.toUpperCase()
+  const conv = await convert(baseRateUSD, "USD", currency)
+  const baseRateInCurrency = conv.amountBase
+  // exchangeRate stored as USD→target so 1 unit USD costs N target.
+  const exchangeRate = conv.exchangeRate
+
+  // Run the canonical calculator twice: once in the chosen currency (what
+  // the user sees) and once in USD (canonical reporting). Per-day overrides
+  // are entered in the chosen currency; the USD column is derived back.
+  const dayInputsCurrency = days.map((d) => ({
+    baseRateUSD: baseRateInCurrency,
     isTravelDay: d.isTravelDay,
     breakfastProvided: d.breakfastProvided,
     lunchProvided: d.lunchProvided,
     dinnerProvided: d.dinnerProvided,
+    amountOverride: d.amountOverride ?? null,
   }))
-  const totalAmountUSD = calculateTotalPerDiem(dayInputs)
+  const dayTotalsCurrency = dayInputsCurrency.map((d) => calculateDayTotal(d))
+  const totalAmount = calculateTotalPerDiem(dayInputsCurrency)
+
+  // Build the USD inputs by either:
+  //   - converting the override back from chosen-currency → USD, OR
+  //   - re-running the formula in USD (no override on that day).
+  const dayInputsUSD = days.map((d) => {
+    if (d.amountOverride != null && d.amountOverride >= 0) {
+      // We can't async-convert per day cheaply; use the same exchangeRate
+      // we already captured (1 USD = exchangeRate target, so 1 target = 1 / exchangeRate USD).
+      const usdOverride = exchangeRate > 0 ? d.amountOverride / exchangeRate : d.amountOverride
+      return {
+        baseRateUSD,
+        isTravelDay: d.isTravelDay,
+        breakfastProvided: d.breakfastProvided,
+        lunchProvided: d.lunchProvided,
+        dinnerProvided: d.dinnerProvided,
+        amountOverride: Math.round(usdOverride * 100) / 100,
+      }
+    }
+    return {
+      baseRateUSD,
+      isTravelDay: d.isTravelDay,
+      breakfastProvided: d.breakfastProvided,
+      lunchProvided: d.lunchProvided,
+      dinnerProvided: d.dinnerProvided,
+    }
+  })
+  const dayTotalsUSD = dayInputsUSD.map((d) => calculateDayTotal(d))
+  const totalAmountUSD = calculateTotalPerDiem(dayInputsUSD)
 
   const created = await prisma.perDiemRequest.create({
     data: {
@@ -151,6 +198,9 @@ export async function POST(req: NextRequest) {
       startDate: start,
       endDate: end,
       totalDays: expected.length,
+      currency,
+      exchangeRate,
+      totalAmount,
       totalAmountUSD,
       reason: reason ?? null,
       status: "PENDING",
@@ -158,12 +208,15 @@ export async function POST(req: NextRequest) {
         createMany: {
           data: days.map((d, i) => ({
             date: utcDate(d.date),
+            baseRate: baseRateInCurrency,
             baseRateUSD,
             isTravelDay: d.isTravelDay,
             breakfastProvided: d.breakfastProvided,
             lunchProvided: d.lunchProvided,
             dinnerProvided: d.dinnerProvided,
-            dailyTotalUSD: calculateDayTotal(dayInputs[i]),
+            dailyTotal: dayTotalsCurrency[i],
+            dailyTotalUSD: dayTotalsUSD[i],
+            isOverride: d.amountOverride != null && d.amountOverride >= 0,
           })),
         },
       },
@@ -228,6 +281,8 @@ async function notifySubmission(request: {
   startDate: Date
   endDate: Date
   totalDays: number
+  currency: string
+  totalAmount: { toString: () => string }
   totalAmountUSD: { toString: () => string }
   employeeId: string
   supervisorId: string
@@ -249,11 +304,12 @@ async function notifySubmission(request: {
     })
     if (profile?.notifyInApp ?? true) {
       const where = request.destinationCity ? `${request.destinationCity}, ${request.destinationCountry}` : request.destinationCountry
+      const amountStr = `${request.currency} ${request.totalAmount.toString()}`
       await prisma.notification.create({
         data: {
           userId: request.supervisorId,
           type: "PER_DIEM_SUBMITTED",
-          message: `New per diem from ${employee?.name ?? "an employee"}: ${where}, ${request.totalDays} day${request.totalDays === 1 ? "" : "s"}, $${request.totalAmountUSD.toString()}`,
+          message: `New per diem from ${employee?.name ?? "an employee"}: ${where}, ${request.totalDays} day${request.totalDays === 1 ? "" : "s"}, ${amountStr}`,
           channel: "IN_APP",
         },
       })
@@ -272,6 +328,9 @@ async function notifySubmission(request: {
     const resend = new Resend(apiKey)
     const where = request.destinationCity ? `${request.destinationCity}, ${request.destinationCountry}` : request.destinationCountry
     const portal = `${process.env.APP_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:3000"}/approver/per-diem`
+    const totalLine = request.currency === "USD"
+      ? `USD ${request.totalAmount.toString()}`
+      : `${request.currency} ${request.totalAmount.toString()} (≈ USD ${request.totalAmountUSD.toString()})`
     await resend.emails.send({
       from: process.env.LEAVE_EMAIL_FROM || "FLUX.AI <noreply@flux.ai>",
       to: supervisor.email,
@@ -281,7 +340,7 @@ async function notifySubmission(request: {
 <ul>
   <li><strong>Destination:</strong> ${where}</li>
   <li><strong>Dates:</strong> ${request.startDate.toISOString().slice(0, 10)} → ${request.endDate.toISOString().slice(0, 10)} (${request.totalDays} days)</li>
-  <li><strong>Total:</strong> $${request.totalAmountUSD.toString()}</li>
+  <li><strong>Total:</strong> ${totalLine}</li>
 </ul>
 <p><a href="${portal}">Review in the portal →</a></p>
 <p style="font-size:12px;color:#666">${organization?.organization?.name ?? "FLUX.AI"} HRMS</p>`,

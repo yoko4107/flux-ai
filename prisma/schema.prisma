@@ -637,8 +637,15 @@ model PerDiemRequest {
   startDate          DateTime
   endDate            DateTime
   totalDays          Int
-  // Total stored as Decimal so floating-point math doesn't drift. All
-  // values are USD per the spec.
+  // Currency the employee chose for the claim (display + payout).
+  // USD is the canonical reporting currency, kept alongside.
+  currency           String        @default("USD")
+  // Rate captured at submission: 1 USD = N chosen-currency units.
+  exchangeRate       Decimal       @default(1) @db.Decimal(15, 6)
+  // Total in the chosen currency.
+  totalAmount        Decimal       @db.Decimal(12, 2)
+  // Total converted to USD — reporting reference, also used for cross-claim
+  // overlap / budget checks where org-wide reporting standardises on USD.
   totalAmountUSD     Decimal       @db.Decimal(12, 2)
   status             PerDiemStatus @default(PENDING)
   reason             String?       @db.Text
@@ -666,6 +673,8 @@ model PerDiemDay {
   requestId         String
   request           PerDiemRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
   date              DateTime
+  // Daily rate in the request's chosen currency (and USD reference).
+  baseRate          Decimal         @db.Decimal(8, 2)
   baseRateUSD       Decimal         @db.Decimal(8, 2)
   // True for the first and last day of the trip → 75% multiplier on the
   // base before deductions (deductions still come off the FULL base).
@@ -673,7 +682,12 @@ model PerDiemDay {
   breakfastProvided Boolean         @default(false)
   lunchProvided     Boolean         @default(false)
   dinnerProvided    Boolean         @default(false)
+  // Daily totals — both currencies stored, dailyTotalUSD is the reference.
+  dailyTotal        Decimal         @db.Decimal(8, 2)
   dailyTotalUSD     Decimal         @db.Decimal(8, 2)
+  // True when the employee manually set the day's amount instead of
+  // accepting the calculated rate × scale × meal-deductions value.
+  isOverride        Boolean         @default(false)
 
   @@unique([requestId, date])
   @@index([requestId])

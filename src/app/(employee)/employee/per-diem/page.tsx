@@ -20,7 +20,16 @@ type DayRow = {
   breakfastProvided: boolean
   lunchProvided: boolean
   dinnerProvided: boolean
+  // Manual override of the day's amount in the chosen currency. null
+  // means "use the calculated value"; a number replaces the formula
+  // result for that day.
+  amountOverride: number | null
 }
+
+// Currencies the form lets you submit in. USD is canonical (matches the
+// admin-configured rates). Anything else is converted at submission via
+// fx-rates and the chosen-currency total is stored alongside the USD ref.
+const CURRENCY_OPTIONS = ["USD", "IDR", "VND", "SGD", "MYR", "THB", "PHP", "JPY", "EUR", "GBP", "AUD", "CNY", "INR", "HKD", "KRW", "SAR", "AED"]
 
 type PerDiemRequest = {
   id: string
@@ -30,6 +39,9 @@ type PerDiemRequest = {
   startDate: string
   endDate: string
   totalDays: number
+  currency: string
+  exchangeRate: string
+  totalAmount: string
   totalAmountUSD: string
   status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED"
   reason: string | null
@@ -39,12 +51,15 @@ type PerDiemRequest = {
   days: {
     id: string
     date: string
+    baseRate: string
     baseRateUSD: string
     isTravelDay: boolean
     breakfastProvided: boolean
     lunchProvided: boolean
     dinnerProvided: boolean
+    dailyTotal: string
     dailyTotalUSD: string
+    isOverride: boolean
   }[]
 }
 
@@ -56,8 +71,12 @@ const STATUS_COLOR: Record<PerDiemRequest["status"], string> = {
 }
 
 // Mirrors lib/per-diem.ts so the live preview matches the server.
+// Override (when non-null) bypasses the formula entirely.
 const MEAL = { breakfast: 0.15, lunch: 0.25, dinner: 0.40 }
 function calcDay(rate: number, d: DayRow): number {
+  if (d.amountOverride != null && d.amountOverride >= 0) {
+    return Math.round(d.amountOverride * 100) / 100
+  }
   const scaled = rate * (d.isTravelDay ? 0.75 : 1.0)
   const ded = (d.breakfastProvided ? rate * MEAL.breakfast : 0)
     + (d.lunchProvided ? rate * MEAL.lunch : 0)
@@ -125,7 +144,7 @@ export default function EmployeePerDiemPage() {
                 <th className="px-5 py-2 text-left">Destination</th>
                 <th className="px-5 py-2 text-left">Dates</th>
                 <th className="px-5 py-2 text-right">Days</th>
-                <th className="px-5 py-2 text-right">Total (USD)</th>
+                <th className="px-5 py-2 text-right">Total</th>
                 <th className="px-5 py-2 text-left">Status</th>
                 <th className="px-5 py-2"></th>
               </tr>
@@ -139,7 +158,12 @@ export default function EmployeePerDiemPage() {
                   </td>
                   <td className="px-5 py-3 text-gray-700">{r.startDate.slice(0,10)} → {r.endDate.slice(0,10)}</td>
                   <td className="px-5 py-3 text-right tabular-nums">{r.totalDays}</td>
-                  <td className="px-5 py-3 text-right tabular-nums font-semibold text-gray-900">${Number(r.totalAmountUSD).toFixed(2)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums font-semibold text-gray-900">
+                    {r.currency} {Number(r.totalAmount).toFixed(2)}
+                    {r.currency !== "USD" && (
+                      <div className="text-[10px] font-normal text-gray-500">≈ USD {Number(r.totalAmountUSD).toFixed(2)}</div>
+                    )}
+                  </td>
                   <td className="px-5 py-3">
                     <span className={`inline-block rounded-full px-2 py-0.5 text-xs ${STATUS_COLOR[r.status]}`}>{r.status.toLowerCase()}</span>
                     {r.rejectionReason && <div className="mt-1 max-w-xs truncate text-xs text-gray-500" title={r.rejectionReason}>“{r.rejectionReason}”</div>}
@@ -221,15 +245,33 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
 
   const [country, setCountry] = useState(countries[0] ?? "")
   const [city, setCity] = useState("")
+  const [currency, setCurrency] = useState("USD")
+  const [exchangeRate, setExchangeRate] = useState(1)
+  const [fxLoading, setFxLoading] = useState(false)
   const [startDate, setStartDate] = useState(today)
   const [endDate, setEndDate] = useState(today)
   const [reason, setReason] = useState("")
-  const [days, setDays] = useState<DayRow[]>([{ date: today, isTravelDay: true, breakfastProvided: false, lunchProvided: false, dinnerProvided: false }])
+  const [days, setDays] = useState<DayRow[]>([{ date: today, isTravelDay: true, breakfastProvided: false, lunchProvided: false, dinnerProvided: false, amountOverride: null }])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  // Pull the USD→target rate whenever the user changes currency. Fall back
+  // to 1:1 on failure (the server will redo the conversion at submit anyway).
+  useEffect(() => {
+    if (currency === "USD") { setExchangeRate(1); return }
+    let cancelled = false
+    setFxLoading(true)
+    fetch(`/api/fx/convert?from=USD&to=${currency}&amount=1`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (!cancelled && data?.exchangeRate) setExchangeRate(Number(data.exchangeRate)) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setFxLoading(false) })
+    return () => { cancelled = true }
+  }, [currency])
+
   // Resolve preview rate inline (matches server's rateForDestination).
-  const previewRate = useMemo(() => {
+  // Returns USD rate + isHighCost; we convert into chosen currency below.
+  const previewRateUSD = useMemo(() => {
     const entry = rates[country]
     if (!entry) return { rate: 0, isHighCost: false }
     if (city && entry.highCost && entry.highCostCities?.length) {
@@ -240,8 +282,17 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
     return { rate: entry.standard, isHighCost: false }
   }, [country, city, rates])
 
+  // Rate displayed in the user's chosen currency.
+  const previewRate = useMemo(
+    () => ({
+      rate: Math.round(previewRateUSD.rate * exchangeRate * 100) / 100,
+      isHighCost: previewRateUSD.isHighCost,
+    }),
+    [previewRateUSD, exchangeRate]
+  )
+
   // Re-materialise the day grid whenever the date range changes. Preserves
-  // user toggles for any dates that survive the new range.
+  // user toggles + per-day overrides for any dates that survive the new range.
   useEffect(() => {
     if (!startDate || !endDate || endDate < startDate) {
       setDays([])
@@ -250,32 +301,25 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
     const newDays: DayRow[] = []
     const cur = new Date(startDate + "T00:00:00Z")
     const end = new Date(endDate + "T00:00:00Z")
-    let i = 0
     while (cur <= end) {
       const dStr = cur.toISOString().slice(0, 10)
       const isFirst = newDays.length === 0
-      // Defer "is last" until after the loop ends — set below.
       const existing = days.find((d) => d.date === dStr)
-      newDays.push(existing
-        ? { ...existing, isTravelDay: existing.isTravelDay }
-        : {
-            date: dStr,
-            isTravelDay: isFirst, // first auto-flagged; last set after the loop
-            breakfastProvided: false,
-            lunchProvided: false,
-            dinnerProvided: false,
-          })
+      newDays.push(existing ?? {
+        date: dStr,
+        isTravelDay: isFirst, // first auto-flagged; last patched below
+        breakfastProvided: false,
+        lunchProvided: false,
+        dinnerProvided: false,
+        amountOverride: null,
+      })
       cur.setUTCDate(cur.getUTCDate() + 1)
-      i++
     }
     if (newDays.length >= 2) {
-      // Always flag last as travel day too — user can untoggle if they
-      // booked a red-eye that lands at 6am, etc.
       const last = newDays[newDays.length - 1]
       const existingLast = days.find((d) => d.date === last.date)
       last.isTravelDay = existingLast ? existingLast.isTravelDay : true
     }
-    void i
     setDays(newDays)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, endDate])
@@ -301,6 +345,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
         body: JSON.stringify({
           destinationCountry: country,
           destinationCity: city || undefined,
+          currency,
           startDate,
           endDate,
           reason: reason || undefined,
@@ -322,11 +367,11 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
         </div>
 
         <div className="space-y-4 p-5">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <label className="block">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Destination country</span>
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Country</span>
               <select required value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-                <option value="">— choose —</option>
+                <option value="">—</option>
                 {countries.map((cc) => <option key={cc} value={cc}>{cc}</option>)}
               </select>
             </label>
@@ -334,11 +379,22 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">City (optional)</span>
               <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Riyadh" className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
             </label>
+            <label className="block">
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Currency</span>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                {CURRENCY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
           </div>
 
           {country && previewRate.rate > 0 && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-              Daily rate: <strong>${previewRate.rate.toFixed(2)}</strong>
+              Daily rate: <strong>{currency} {previewRate.rate.toFixed(2)}</strong>
+              {currency !== "USD" && (
+                <span className="ml-2 text-xs text-blue-700">
+                  (USD {previewRateUSD.rate.toFixed(2)} × {exchangeRate.toFixed(4)}{fxLoading ? " …" : ""})
+                </span>
+              )}
               {previewRate.isHighCost && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">High-cost city</span>}
             </div>
           )}
@@ -379,28 +435,58 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
                     <th className="px-3 py-2 text-center">Breakfast<br/><span className="text-[9px] font-normal">(−15%)</span></th>
                     <th className="px-3 py-2 text-center">Lunch<br/><span className="text-[9px] font-normal">(−25%)</span></th>
                     <th className="px-3 py-2 text-center">Dinner<br/><span className="text-[9px] font-normal">(−40%)</span></th>
-                    <th className="px-3 py-2 text-right">Daily (USD)</th>
+                    <th className="px-3 py-2 text-right">Daily ({currency})</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {days.map((d, idx) => (
-                    <tr key={d.date}>
-                      <td className="px-3 py-1.5 tabular-nums">{d.date}</td>
-                      <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.isTravelDay} onChange={(e) => setDayField(idx, "isTravelDay", e.target.checked)} /></td>
-                      <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.breakfastProvided} onChange={(e) => setDayField(idx, "breakfastProvided", e.target.checked)} /></td>
-                      <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.lunchProvided} onChange={(e) => setDayField(idx, "lunchProvided", e.target.checked)} /></td>
-                      <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.dinnerProvided} onChange={(e) => setDayField(idx, "dinnerProvided", e.target.checked)} /></td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">${calcDay(previewRate.rate, d).toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {days.map((d, idx) => {
+                    const computed = calcDay(previewRate.rate, { ...d, amountOverride: null })
+                    const shown = d.amountOverride != null ? d.amountOverride : computed
+                    const isOverride = d.amountOverride != null
+                    return (
+                      <tr key={d.date}>
+                        <td className="px-3 py-1.5 tabular-nums">{d.date}</td>
+                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.isTravelDay} onChange={(e) => setDayField(idx, "isTravelDay", e.target.checked)} /></td>
+                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.breakfastProvided} disabled={isOverride} onChange={(e) => setDayField(idx, "breakfastProvided", e.target.checked)} /></td>
+                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.lunchProvided} disabled={isOverride} onChange={(e) => setDayField(idx, "lunchProvided", e.target.checked)} /></td>
+                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={d.dinnerProvided} disabled={isOverride} onChange={(e) => setDayField(idx, "dinnerProvided", e.target.checked)} /></td>
+                        <td className="px-3 py-1.5 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <input
+                              type="number" step="0.01" min="0" max="10000"
+                              value={shown.toFixed(2)}
+                              onChange={(e) => setDayField(idx, "amountOverride", Number(e.target.value))}
+                              className={`w-24 rounded border px-2 py-1 text-right text-sm tabular-nums ${
+                                isOverride ? "border-amber-300 bg-amber-50" : "border-gray-200"
+                              }`}
+                              title={isOverride ? `Manual override (calculated would be ${currency} ${computed.toFixed(2)})` : ""}
+                            />
+                            {isOverride && (
+                              <button
+                                type="button"
+                                onClick={() => setDayField(idx, "amountOverride", null)}
+                                className="rounded text-[10px] text-blue-600 hover:underline"
+                                title="Reset to calculated value"
+                              >
+                                ↺
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
                 <tfoot>
                   <tr className="bg-gray-50">
                     <td colSpan={5} className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-600">Total</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900">${total.toFixed(2)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900">{currency} {total.toFixed(2)}</td>
                   </tr>
                 </tfoot>
               </table>
+              <p className="border-t border-gray-200 bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
+                Edit any daily amount directly to override the formula for that day. Click ↺ to revert.
+              </p>
             </div>
           )}
 
@@ -411,7 +497,7 @@ function PerDiemForm({ rates, onClose, onSubmitted }: { rates: RateTable; onClos
           <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
           <button type="submit" disabled={busy || previewRate.rate <= 0 || days.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-[#0B1E3F] px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Submit ${total.toFixed(2)}
+            Submit {currency} {total.toFixed(2)}
           </button>
         </div>
       </form>
