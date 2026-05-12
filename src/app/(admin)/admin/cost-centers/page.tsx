@@ -247,26 +247,24 @@ function CostCenterCard({
 
       {/* Members section */}
       <div className="border-t border-gray-100">
-        <button
-          className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50/60"
-          onClick={() => setMembersOpen((v) => !v)}
-        >
-          <span className="flex items-center gap-2">
+        <div className="flex w-full items-center justify-between px-5 py-3">
+          <button
+            className="flex items-center gap-2 text-left hover:opacity-70"
+            onClick={() => setMembersOpen((v) => !v)}
+          >
             <UsersIcon className="h-3.5 w-3.5 text-gray-500" />
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-600">
               Employees ({employees.length})
             </span>
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); setAddingMember(true); setMembersOpen(true) }}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-            >
-              <UserPlus className="h-3 w-3" /> Add employee
-            </button>
             {membersOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
-          </div>
-        </button>
+          </button>
+          <button
+            onClick={() => { setAddingMember(true); setMembersOpen(true) }}
+            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+          >
+            <UserPlus className="h-3 w-3" /> Add employee
+          </button>
+        </div>
 
         {membersOpen && (
           <div className="bg-gray-50/40 px-5 pb-3">
