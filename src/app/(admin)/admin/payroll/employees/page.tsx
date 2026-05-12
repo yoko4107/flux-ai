@@ -40,7 +40,9 @@ export default function PayrollEmployeesPage() {
   const [selected, setSelected] = useState<User | null>(null)
 
   useEffect(() => {
-    fetch("/api/admin/users").then((r) => r.json()).then((d) => setUsers(d.users ?? []))
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((d) => setUsers(Array.isArray(d) ? d : (d.users ?? [])))
   }, [])
 
   const filtered = useMemo(

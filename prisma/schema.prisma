@@ -205,6 +205,34 @@ model Organization {
   employeeCompensations EmployeeCompensation[]
   payrollAdjustments PayrollAdjustment[]
   payslips Payslip[]
+  costCenters CostCenter[]
+}
+
+// Regional cost center inside an Organization (e.g. "Indonesia HQ",
+// "Vietnam Office"). Drives per-user reimbursement currency and — once
+// the routing pass lands — scopes which Approver / Finance users see
+// which requests. The org base currency remains the global reporting
+// fallback for users with no cost center assigned.
+model CostCenter {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Short stable handle (e.g. "ID-HQ", "VN-HCM"). Unique per org.
+  code           String
+  name           String
+  // ISO-3166-1 alpha-2 — drives default rules / public holidays scoping
+  // when the per-CC payroll rules land. Defaults to org's countryCode.
+  countryCode    String
+  // ISO-4217 — every reimbursement raised by a user assigned to this CC
+  // converts to this currency, regardless of receipt currency.
+  currency       String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  users          User[]   @relation("UserCostCenter")
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
 }
 
 model User {
@@ -219,6 +247,11 @@ model User {
   createdAt     DateTime  @default(now())
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
+  // Regional assignment. Drives the reimbursement payout currency
+  // (overrides Organization.baseCurrency). Nullable for back-compat —
+  // unassigned users fall through to org base.
+  costCenterId  String?
+  costCenter    CostCenter? @relation("UserCostCenter", fields: [costCenterId], references: [id], onDelete: SetNull)
   status        UserStatus @default(PENDING)
   nationalIdUrl String?
   selfieUrl     String?

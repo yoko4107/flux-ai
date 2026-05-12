@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { getSubmissionMonth } from "@/lib/submission-month"
 import { convert } from "@/lib/fx-rates"
-import { getOrgBaseCurrency } from "@/lib/org-currency"
+import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
 
@@ -106,8 +106,11 @@ export async function PATCH(
   {
     const finalAmount = amount ?? Number(request.amount)
     const finalCurrency = currency ?? request.currency
-    const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
-    const { amountBase, exchangeRate: fxRate } = await convert(finalAmount, finalCurrency, baseCurrency)
+    // Convert into the *employee's* reimbursement currency (cost-center
+    // first, org base fallback) — not the editor's, since admins can edit
+    // someone else's request.
+    const { currency: targetCurrency } = await getReimbursementCurrencyForUser(request.employeeId)
+    const { amountBase, exchangeRate: fxRate } = await convert(finalAmount, finalCurrency, targetCurrency)
     updateData.amountIDR = amountBase
     updateData.exchangeRate = fxRate
   }

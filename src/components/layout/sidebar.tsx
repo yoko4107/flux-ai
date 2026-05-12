@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { Logo } from "@/components/brand/logo"
-import { Building2 } from "lucide-react"
+import { Building2, MapPin } from "lucide-react"
 import {
   LayoutDashboard,
   FileText,
@@ -112,6 +112,12 @@ const navItems: NavItem[] = [
     title: "Users",
     href: "/admin/users",
     icon: <Users className="h-4 w-4" />,
+    roles: ["ADMIN"],
+  },
+  {
+    title: "Cost Centers",
+    href: "/admin/cost-centers",
+    icon: <MapPin className="h-4 w-4" />,
     roles: ["ADMIN"],
   },
   {

@@ -5,7 +5,7 @@ import { writeAuditLog } from "@/lib/audit"
 import { sendNotification } from "@/lib/notifications"
 import { getConfig, getAllConfigs } from "@/lib/config"
 import { convert } from "@/lib/fx-rates"
-import { getOrgBaseCurrency } from "@/lib/org-currency"
+import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category } from "@/generated/prisma"
 import { Prisma } from "@/generated/prisma"
 
@@ -106,11 +106,12 @@ export async function PATCH(
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 })
   }
 
-  // Recalculate conversion to the org base currency
+  // Recalculate conversion to the employee's reimbursement currency
+  // (cost-center → org base).
   const finalAmt = amount !== undefined ? Number(amount) : Number(request.amount)
   const finalCur = currency !== undefined ? currency : request.currency
-  const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
-  const { amountBase, exchangeRate: fxRate } = await convert(finalAmt, finalCur, baseCurrency)
+  const { currency: targetCurrency } = await getReimbursementCurrencyForUser(request.employeeId)
+  const { amountBase, exchangeRate: fxRate } = await convert(finalAmt, finalCur, targetCurrency)
   updateData.amountIDR = amountBase
   updateData.exchangeRate = fxRate
 

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { getSubmissionMonth } from "@/lib/submission-month"
 import { convert } from "@/lib/fx-rates"
-import { getOrgBaseCurrency } from "@/lib/org-currency"
+import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category, RequestStatus } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
 
@@ -127,10 +127,11 @@ export async function POST(req: NextRequest) {
     month,
   }
 
-  // Convert to the employee's organization base currency (defaults to IDR).
-  // amountIDR column reuses the same storage and now holds the amount in base currency.
-  const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
-  const { amountBase, exchangeRate } = await convert(Number(amount), currency, baseCurrency)
+  // Convert to the employee's *reimbursement* currency — driven by their
+  // cost center first, falling back to the org's base currency. The legacy
+  // amountIDR column now holds the amount in this resolved target currency.
+  const { currency: targetCurrency } = await getReimbursementCurrencyForUser(session.user.id)
+  const { amountBase, exchangeRate } = await convert(Number(amount), currency, targetCurrency)
   createData.amountIDR = amountBase
   createData.exchangeRate = exchangeRate
 

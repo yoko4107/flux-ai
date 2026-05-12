@@ -10,6 +10,9 @@ const patchUserSchema = z.object({
   department: z.string().nullable().optional(),
   managerId: z.string().nullable().optional(),
   organizationId: z.string().nullable().optional(),
+  // Regional cost center — drives the user's reimbursement payout currency.
+  // null clears the assignment (falls through to org base).
+  costCenterId: z.string().nullable().optional(),
 })
 
 export async function PATCH(
@@ -51,7 +54,20 @@ export async function PATCH(
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const { role, status, department, managerId, organizationId } = parsed.data
+  const { role, status, department, managerId, organizationId, costCenterId } = parsed.data
+
+  // If the caller is trying to assign a cost center, make sure it belongs
+  // to the target user's org (or the caller's org for non-super-admins).
+  if (costCenterId) {
+    const cc = await prisma.costCenter.findUnique({ where: { id: costCenterId } })
+    if (!cc) {
+      return NextResponse.json({ error: "Cost center not found" }, { status: 400 })
+    }
+    const targetOrgId = organizationId ?? existing.organizationId
+    if (cc.organizationId !== targetOrgId) {
+      return NextResponse.json({ error: "Cost center belongs to a different organization" }, { status: 400 })
+    }
+  }
 
   const user = await prisma.user.update({
     where: { id },
@@ -61,6 +77,7 @@ export async function PATCH(
       ...(department !== undefined ? { department } : {}),
       ...(managerId !== undefined ? { managerId } : {}),
       ...(organizationId !== undefined ? { organizationId } : {}),
+      ...(costCenterId !== undefined ? { costCenterId } : {}),
     },
     select: {
       id: true,
@@ -71,9 +88,11 @@ export async function PATCH(
       department: true,
       managerId: true,
       organizationId: true,
+      costCenterId: true,
       createdAt: true,
       manager: { select: { name: true } },
       organization: { select: { id: true, name: true } },
+      costCenter: { select: { id: true, code: true, name: true, currency: true, countryCode: true } },
       _count: { select: { requests: true } },
     },
   })

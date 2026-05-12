@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { getSubmissionMonth } from "@/lib/submission-month"
 import { convert } from "@/lib/fx-rates"
-import { getOrgBaseCurrency } from "@/lib/org-currency"
+import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category, Prisma } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
 import { writeFile, mkdir } from "fs/promises"
@@ -254,9 +254,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Convert to the employee's organization base currency.
-      const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
-      const { amountBase: idrAmount, exchangeRate: fxRate } = await convert(amount || 0, currency, baseCurrency)
+      // Convert to the employee's reimbursement currency (cost-center → org base).
+      const { currency: targetCurrency } = await getReimbursementCurrencyForUser(session.user.id)
+      const { amountBase: idrAmount, exchangeRate: fxRate } = await convert(amount || 0, currency, targetCurrency)
 
       // Create the request
       const request = await prisma.reimbursementRequest.create({
