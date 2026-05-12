@@ -55,6 +55,7 @@ const createUserSchema = z.object({
   department: z.string().optional(),
   managerId: z.string().optional(),
   organizationId: z.string().optional(),
+  costCenterId: z.string().optional(),
 })
 
 export async function POST(request: Request) {
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
   const parsed = createUserSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: "Invalid input", details: parsed.error.issues }, { status: 400 })
 
-  const { name, email, role, department, managerId, organizationId } = parsed.data
+  const { name, email, role, department, managerId, organizationId, costCenterId } = parsed.data
 
   const isSuperAdmin = session.user.role === "SUPER_ADMIN"
   const orgId = isSuperAdmin
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
       department: department ?? null,
       managerId: managerId ?? null,
       organizationId: orgId,
+      costCenterId: costCenterId ?? null,
     },
     select: {
       id: true,

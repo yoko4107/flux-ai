@@ -1,12 +1,10 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Loader2, Plus, Save, Trash2, Building2, Users as UsersIcon, Power } from "lucide-react"
-
-// Admin → Cost Centers.
-// Each cost center is a regional sub-org with its own ISO country, currency,
-// and (eventually) its own approver/finance routing. Users are assigned to
-// a cost center to drive their reimbursement payout currency.
+import {
+  Loader2, Plus, Save, Trash2, Building2, Users as UsersIcon,
+  Power, UserPlus, Pencil, X, ChevronDown, ChevronRight,
+} from "lucide-react"
 
 type CostCenter = {
   id: string
@@ -24,6 +22,8 @@ type UserRow = {
   name: string | null
   email: string
   role: string
+  status: "ACTIVE" | "INACTIVE" | "PENDING"
+  department: string | null
   costCenterId: string | null
   costCenter: { id: string; code: string; name: string; currency: string } | null
   organizationId: string | null
@@ -88,11 +88,11 @@ export default function CostCentersPage() {
     <div className="max-w-5xl space-y-5 p-1">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Regional Cost Centers</h1>
+          <h1 className="text-2xl font-bold text-gray-900">User Cost Center</h1>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-            Each cost center is a regional office (e.g. Indonesia, Vietnam) with its own ISO country and payout currency.
-            Every reimbursement raised by a user assigned to a cost center is converted into that cost center&apos;s currency
-            on submit. Per-diem requests can override the payout currency on a per-trip basis.
+            Each cost center is a regional office with its own currency. Employees are managed directly under
+            their cost center. Approver and Finance roles are assigned in{" "}
+            <a href="/admin/config" className="underline text-blue-600 hover:text-blue-800">Configuration</a>.
           </p>
         </div>
         <button
@@ -130,15 +130,14 @@ export default function CostCentersPage() {
               busy={busy === cc.id}
               onSave={(patch) => save(cc.id, patch)}
               onDelete={() => remove(cc)}
+              onRefresh={load}
             />
           ))}
         </div>
       )}
 
-      {/* Unassigned users sidebar — admins should clean these up so the
-          currency rule applies uniformly. */}
       <UnassignedUsers
-        users={users.filter((u) => !u.costCenterId)}
+        users={users.filter((u) => !u.costCenterId && u.role === "EMPLOYEE")}
         costCenters={items}
         onAssigned={load}
       />
@@ -152,29 +151,29 @@ function CostCenterCard({
   busy,
   onSave,
   onDelete,
+  onRefresh,
 }: {
   cc: CostCenter
   users: UserRow[]
   busy: boolean
   onSave: (patch: Partial<CostCenter>) => void
   onDelete: () => void
+  onRefresh: () => void
 }) {
   const [draft, setDraft] = useState({ name: cc.name, countryCode: cc.countryCode, currency: cc.currency, active: cc.active })
   useEffect(() => setDraft({ name: cc.name, countryCode: cc.countryCode, currency: cc.currency, active: cc.active }), [cc])
   const dirty = draft.name !== cc.name || draft.countryCode !== cc.countryCode || draft.currency !== cc.currency || draft.active !== cc.active
 
-  const byRole = useMemo(() => {
-    const buckets: Record<string, UserRow[]> = {}
-    for (const u of users) {
-      const r = u.role
-      buckets[r] ??= []
-      buckets[r].push(u)
-    }
-    return buckets
-  }, [users])
+  const [membersOpen, setMembersOpen] = useState(true)
+  const [addingMember, setAddingMember] = useState(false)
+  const [editMember, setEditMember] = useState<UserRow | null>(null)
+
+  const employees = useMemo(() => users.filter((u) => u.role === "EMPLOYEE"), [users])
+  const staffRoles = useMemo(() => users.filter((u) => u.role !== "EMPLOYEE"), [users])
 
   return (
     <article className={`rounded-xl border bg-white ${cc.active ? "border-gray-200" : "border-gray-200 opacity-75"}`}>
+      {/* Header */}
       <header className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
         <div className="flex items-center gap-3">
           <Building2 className="h-4 w-4 text-gray-500" />
@@ -198,6 +197,7 @@ function CostCenterCard({
         </div>
       </header>
 
+      {/* Settings */}
       <div className="grid gap-3 px-5 py-4 md:grid-cols-4">
         <label className="block md:col-span-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">Name</span>
@@ -245,27 +245,263 @@ function CostCenterCard({
         </div>
       </div>
 
-      {Object.keys(byRole).length > 0 && (
-        <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-2">Assigned members</p>
-          <div className="grid gap-2 md:grid-cols-2">
-            {Object.entries(byRole).map(([role, list]) => (
-              <div key={role}>
-                <p className="text-[10px] font-mono uppercase text-gray-500 mb-1">{role.replace("_", " ").toLowerCase()}</p>
+      {/* Members section */}
+      <div className="border-t border-gray-100">
+        <button
+          className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-gray-50/60"
+          onClick={() => setMembersOpen((v) => !v)}
+        >
+          <span className="flex items-center gap-2">
+            <UsersIcon className="h-3.5 w-3.5 text-gray-500" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-600">
+              Employees ({employees.length})
+            </span>
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); setAddingMember(true); setMembersOpen(true) }}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+            >
+              <UserPlus className="h-3 w-3" /> Add employee
+            </button>
+            {membersOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+          </div>
+        </button>
+
+        {membersOpen && (
+          <div className="bg-gray-50/40 px-5 pb-3">
+            {addingMember && (
+              <AddMemberForm
+                costCenterId={cc.id}
+                onCancel={() => setAddingMember(false)}
+                onSaved={() => { setAddingMember(false); onRefresh() }}
+              />
+            )}
+            {employees.length === 0 && !addingMember ? (
+              <p className="py-3 text-xs text-gray-400">No employees yet. Add one above.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {employees.map((u) => (
+                  <li key={u.id}>
+                    {editMember?.id === u.id ? (
+                      <EditMemberRow
+                        user={u}
+                        onCancel={() => setEditMember(null)}
+                        onSaved={() => { setEditMember(null); onRefresh() }}
+                        onRemove={() => { setEditMember(null); onRefresh() }}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-between py-2">
+                        <div>
+                          <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
+                          <p className="text-[11px] text-gray-500">
+                            {u.email}
+                            {u.department ? ` · ${u.department}` : ""}
+                            {u.status !== "ACTIVE" && (
+                              <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${u.status === "INACTIVE" ? "bg-gray-100 text-gray-500" : "bg-yellow-100 text-yellow-700"}`}>
+                                {u.status.toLowerCase()}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setEditMember(u)}
+                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {staffRoles.length > 0 && (
+              <div className="mt-2 border-t border-gray-100 pt-2">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  Staff with elevated roles
+                  <span className="ml-1 font-normal normal-case">(manage in <a href="/admin/config" className="underline">Configuration</a>)</span>
+                </p>
                 <ul className="space-y-0.5">
-                  {list.map((u) => (
-                    <li key={u.id} className="truncate text-xs text-gray-700">
+                  {staffRoles.map((u) => (
+                    <li key={u.id} className="flex items-center gap-2 text-[11px] text-gray-500">
+                      <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">{u.role}</span>
                       {u.name ?? u.email}
-                      <span className="text-gray-400"> · {u.email}</span>
                     </li>
                   ))}
                 </ul>
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </article>
+  )
+}
+
+function AddMemberForm({ costCenterId, onCancel, onSaved }: { costCenterId: string; onCancel: () => void; onSaved: () => void }) {
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [department, setDepartment] = useState("")
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    setBusy(true)
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, role: "EMPLOYEE", department: department || undefined, costCenterId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        alert(err?.error ?? "Failed to add employee")
+      } else {
+        onSaved()
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-blue-700">New employee</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <input
+          placeholder="Full name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+        />
+        <input
+          placeholder="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+        />
+        <input
+          placeholder="Department (optional)"
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+        />
+      </div>
+      <div className="mt-2 flex justify-end gap-2">
+        <button onClick={onCancel} className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs hover:bg-gray-50">
+          Cancel
+        </button>
+        <button
+          onClick={save}
+          disabled={busy || !name || !email}
+          className="inline-flex items-center gap-1 rounded-md bg-[#0B1E3F] px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+        >
+          {busy && <Loader2 className="h-3 w-3 animate-spin" />} Add
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function EditMemberRow({ user, onCancel, onSaved, onRemove }: {
+  user: UserRow
+  onCancel: () => void
+  onSaved: () => void
+  onRemove: () => void
+}) {
+  const [name, setName] = useState(user.name ?? "")
+  const [department, setDepartment] = useState(user.department ?? "")
+  const [status, setStatus] = useState<"ACTIVE" | "INACTIVE" | "PENDING">(user.status)
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name || null, department: department || null, status }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        alert(err?.error ?? "Save failed")
+      } else {
+        onSaved()
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeFromCenter() {
+    if (!confirm(`Remove ${user.name ?? user.email} from this cost center?`)) return
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ costCenterId: null }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        alert(err?.error ?? "Failed")
+      } else {
+        onRemove()
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="my-1 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <input
+          placeholder="Full name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+        />
+        <input
+          placeholder="Department"
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+        />
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE" | "PENDING")}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+        >
+          <option value="ACTIVE">Active</option>
+          <option value="INACTIVE">Inactive</option>
+          <option value="PENDING">Pending</option>
+        </select>
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        <button
+          onClick={removeFromCenter}
+          disabled={busy}
+          className="text-[11px] text-red-500 hover:text-red-700 disabled:opacity-50"
+        >
+          Remove from center
+        </button>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs hover:bg-gray-50">
+            <X className="h-3 w-3" />
+          </button>
+          <button
+            onClick={save}
+            disabled={busy}
+            className="inline-flex items-center gap-1 rounded-md bg-[#0B1E3F] px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -350,29 +586,35 @@ function UnassignedUsers({
   costCenters,
   onAssigned,
 }: { users: UserRow[]; costCenters: CostCenter[]; onAssigned: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null)
   if (users.length === 0 || costCenters.length === 0) return null
   const active = costCenters.filter((c) => c.active)
 
   async function assign(userId: string, costCenterId: string) {
-    const res = await fetch(`/api/admin/users/${userId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ costCenterId }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => null)
-      alert(err?.error ?? "Assign failed")
-    } else {
-      onAssigned()
+    setBusy(userId)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ costCenterId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        alert(err?.error ?? "Assign failed")
+      } else {
+        onAssigned()
+      }
+    } finally {
+      setBusy(null)
     }
   }
 
   return (
     <section className="rounded-xl border border-amber-200 bg-amber-50/40">
       <header className="border-b border-amber-200/60 px-5 py-3">
-        <h2 className="text-sm font-semibold text-amber-900">Unassigned users ({users.length})</h2>
+        <h2 className="text-sm font-semibold text-amber-900">Unassigned employees ({users.length})</h2>
         <p className="text-xs text-amber-800/80 mt-0.5">
-          These users will fall through to the organization base currency. Assign them to a cost center to scope their reimbursements.
+          These employees have no cost center — their reimbursements will use the org base currency.
         </p>
       </header>
       <ul className="divide-y divide-amber-100">
@@ -380,12 +622,13 @@ function UnassignedUsers({
           <li key={u.id} className="flex items-center justify-between px-5 py-2.5">
             <div>
               <p className="text-sm font-medium text-gray-900">{u.name ?? "—"}</p>
-              <p className="text-xs text-gray-500">{u.email} · {u.role}</p>
+              <p className="text-xs text-gray-500">{u.email}</p>
             </div>
             <select
+              disabled={busy === u.id}
               defaultValue=""
               onChange={(e) => { if (e.target.value) assign(u.id, e.target.value) }}
-              className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="" disabled>Assign to…</option>
               {active.map((c) => (
