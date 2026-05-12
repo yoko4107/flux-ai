@@ -233,6 +233,7 @@ model CostCenter {
   payrollRules   CountryPayrollRule[] @relation("CostCenterPayrollRules")
   compensations  EmployeeCompensation[] @relation("CostCenterCompensations")
   payslips       Payslip[] @relation("CostCenterPayslips")
+  adminConfigs   AdminConfig[] @relation("AdminConfigCostCenter")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -376,13 +377,20 @@ model AdminConfig {
   key            String
   value          Json
   organizationId String?
+  // Optional cost-center scope. null = org-wide setting (the legacy
+  // behaviour). When a CC-specific row exists for the same (key, org),
+  // it overrides the org-wide one for users in that CC. Resolved via
+  // getConfig(prisma, key, orgId, costCenterId?).
+  costCenterId   String?
   updatedAt      DateTime @updatedAt
   updatedById    String?
 
   updatedBy    User?         @relation(fields: [updatedById], references: [id])
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  costCenter   CostCenter?   @relation("AdminConfigCostCenter", fields: [costCenterId], references: [id], onDelete: Cascade)
 
-  @@unique([key, organizationId])
+  @@unique([key, organizationId, costCenterId], map: "AdminConfig_key_org_cc_key")
+  @@index([key, organizationId])
 }
 
 model MonthlyReport {

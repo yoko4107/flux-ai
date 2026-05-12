@@ -4,10 +4,10 @@ import { useEffect, useState } from "react"
 import { Loader2, Plus, Trash2, RotateCcw, CheckCircle2 } from "lucide-react"
 
 // Admin per-diem rate configuration.
-//   - Edit standard rate per country.
-//   - Optional high-cost tier with city allowlist (matched as case-insensitive
-//     substring against destinationCity).
-//   - Reset reverts to the built-in defaults (VN $70, ID $85, SA $115/$140).
+//   - Per-region: pick a cost center (or org-wide) to edit its rate sheet.
+//   - Standard daily rate per country, optional high-cost tier with city
+//     allowlist (case-insensitive substring on destinationCity).
+//   - Reset reverts the active bucket to defaults / parent layer.
 //
 // All amounts in USD per the spec.
 
@@ -17,19 +17,25 @@ type Rate = {
   highCostCities?: string[]
 }
 type RateTable = Record<string, Rate>
+type CostCenter = { id: string; code: string; name: string; currency: string; countryCode: string }
 
 export default function AdminPerDiemPage() {
   const [rates, setRates] = useState<RateTable>({})
   const [isOverride, setIsOverride] = useState(false)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
+  // "" = org-wide bucket, "<id>" = a specific cost center.
+  const [scope, setScope] = useState<string>("")
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([])
 
   async function load() {
-    const data = await fetch("/api/per-diem/admin/rates").then((r) => r.json())
+    const qs = scope ? `?costCenterId=${scope}` : ""
+    const data = await fetch(`/api/per-diem/admin/rates${qs}`).then((r) => r.json())
     setRates(data.rates ?? {})
     setIsOverride(!!data.isOverride)
+    setCostCenters(data.costCenters ?? [])
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [scope]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function setCountry(cc: string, rate: Rate) {
     setRates((prev) => ({ ...prev, [cc]: rate }))
@@ -60,17 +66,21 @@ export default function AdminPerDiemPage() {
       const res = await fetch("/api/per-diem/admin/rates", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rates }),
+        body: JSON.stringify({ rates, costCenterId: scope || null }),
       })
       if (res.ok) { setSaved(true); load() }
     } finally { setBusy(false); setTimeout(() => setSaved(false), 2500) }
   }
 
   async function reset() {
-    if (!confirm("Remove the org-specific override and revert to built-in defaults?")) return
+    const target = scope
+      ? costCenters.find((c) => c.id === scope)?.name ?? "this cost center"
+      : "the org-wide bucket"
+    if (!confirm(`Remove the override for ${target}? Rates fall back to the parent layer / built-in defaults.`)) return
     setBusy(true)
     try {
-      await fetch("/api/per-diem/admin/rates", { method: "DELETE" })
+      const qs = scope ? `?costCenterId=${scope}` : ""
+      await fetch(`/api/per-diem/admin/rates${qs}`, { method: "DELETE" })
       load()
     } finally { setBusy(false) }
   }
@@ -82,16 +92,35 @@ export default function AdminPerDiemPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Per Diem — Admin</h1>
-          <p className="text-sm text-gray-500 mt-1">Set the daily rate per country. All amounts in USD.</p>
+          <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+            Set the daily rate per country. All amounts in USD. Each regional cost center
+            can layer its own overrides on top of the org-wide bucket — useful when, say,
+            your Vietnam office reimburses Japan trips differently than the Indonesia office.
+          </p>
         </div>
         <span className={`text-xs ${isOverride ? "text-blue-700" : "text-gray-500"}`}>
-          {isOverride ? "Custom override" : "Using built-in defaults"}
+          {isOverride ? "Custom override" : "Inherited from parent layer / defaults"}
         </span>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <h2 className="text-sm font-semibold text-gray-900">Country rates</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold text-gray-900">Country rates</h2>
+            <label className="text-xs text-gray-500">
+              Scope
+              <select
+                value={scope}
+                onChange={(e) => setScope(e.target.value)}
+                className="ml-2 rounded border border-gray-300 px-2 py-1 text-xs"
+              >
+                <option value="">Org-wide bucket</option>
+                {costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <button onClick={addCountry} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">
             <Plus className="h-3.5 w-3.5" /> Add country
           </button>

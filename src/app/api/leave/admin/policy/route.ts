@@ -49,7 +49,7 @@ export async function PUT(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "Invalid input", details: parsed.error.flatten() }, { status: 400 })
 
   await prisma.adminConfig.upsert({
-    where: { key_organizationId: { key: POLICY_CONFIG_KEY, organizationId: session.user.organizationId } },
+    where: { key_organizationId_costCenterId: { key: POLICY_CONFIG_KEY, organizationId: session.user.organizationId, costCenterId: null as unknown as string } },
     update: { value: parsed.data, updatedById: session.user.id },
     create: { key: POLICY_CONFIG_KEY, organizationId: session.user.organizationId, value: parsed.data, updatedById: session.user.id },
   })

@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
   const employee = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, organizationId: true, managerId: true },
+    select: { id: true, organizationId: true, managerId: true, costCenterId: true },
   })
   if (!employee?.organizationId) {
     return NextResponse.json({ error: "User has no organization" }, { status: 400 })
@@ -154,7 +154,9 @@ export async function POST(req: NextRequest) {
   // Resolve the policy rate (informational only now — items drive the
   // total). Captures the destination's high-cost flag and the FX rate at
   // submission so the stored claim is reproducible.
-  const rates = await getRateTable(employee.organizationId)
+  // Resolve rates against the employee's regional office — Vietnam-based
+  // travelers see VN-office overrides on top of the org defaults.
+  const rates = await getRateTable(employee.organizationId, employee.costCenterId)
   const { rate: baseRateUSD, isHighCost } = rateForDestination(rates, destinationCountry, destinationCity)
   if (baseRateUSD <= 0) {
     return NextResponse.json(

@@ -20,8 +20,6 @@
  */
 
 import { prisma } from "@/lib/prisma"
-import { getConfig } from "@/lib/config"
-
 export const PER_DIEM_RATES_KEY = "perDiem.rates"
 
 export interface CountryRate {
@@ -185,19 +183,43 @@ export function rateForDestination(
 // ---------------------------------------------------------------------------
 
 /**
- * Effective rate table for an organisation: admin override merged on top
- * of the built-in defaults so admins only need to specify the entries
- * they want to change.
+ * Effective rate table for an organisation, optionally scoped to a cost
+ * center. Resolution order (each step layered on top of the previous):
+ *   1. DEFAULT_RATES (built-in)
+ *   2. Org-wide AdminConfig override
+ *   3. Cost-center-specific AdminConfig override
+ *
+ * So Vietnam-office admins can set $80/day for Japan without affecting
+ * the Indonesia office's $85/day. Per-country merge — admins only need
+ * to specify the entries they want to change.
  */
-export async function getRateTable(organizationId: string): Promise<RateTable> {
-  const stored = (await getConfig(prisma, PER_DIEM_RATES_KEY, organizationId)) as RateTable | null
-  if (!stored || typeof stored !== "object") return { ...DEFAULT_RATES }
-  // Per-country merge, not just spread, so an admin can change just the
-  // standard rate for VN without losing the SA highCostCities list.
+export async function getRateTable(
+  organizationId: string,
+  costCenterId?: string | null
+): Promise<RateTable> {
+  // Pull both rows in parallel so we can layer them deterministically.
+  // Reading the rows directly (not through getConfig's fallback chain)
+  // avoids applying the org-wide layer twice when no CC row exists.
+  const [orgWideRow, ccRow] = await Promise.all([
+    prisma.adminConfig.findFirst({
+      where: { key: PER_DIEM_RATES_KEY, organizationId, costCenterId: null },
+      select: { value: true },
+    }),
+    costCenterId
+      ? prisma.adminConfig.findFirst({
+          where: { key: PER_DIEM_RATES_KEY, organizationId, costCenterId },
+          select: { value: true },
+        })
+      : Promise.resolve(null),
+  ])
+
   const merged: RateTable = { ...DEFAULT_RATES }
-  for (const [cc, entry] of Object.entries(stored)) {
-    if (!entry || typeof entry !== "object") continue
-    merged[cc.toUpperCase()] = { ...DEFAULT_RATES[cc.toUpperCase()], ...entry }
+  for (const layer of [orgWideRow?.value, ccRow?.value] as Array<RateTable | null | undefined>) {
+    if (!layer || typeof layer !== "object") continue
+    for (const [cc, entry] of Object.entries(layer)) {
+      if (!entry || typeof entry !== "object") continue
+      merged[cc.toUpperCase()] = { ...merged[cc.toUpperCase()], ...entry }
+    }
   }
   return merged
 }

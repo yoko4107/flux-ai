@@ -112,12 +112,12 @@ export async function PUT(request: Request) {
   if ("error" in scope) return NextResponse.json({ error: scope.error }, { status: scope.status })
 
   const existing = await prisma.adminConfig.findUnique({
-    where: { key_organizationId: { key, organizationId: scope.orgId ?? null as unknown as string } },
+    where: { key_organizationId_costCenterId: { key, organizationId: scope.orgId ?? null as unknown as string, costCenterId: null as unknown as string } },
   }).catch(() => null)
   const oldValue = existing?.value ?? null
 
   const updated = await prisma.adminConfig.upsert({
-    where: { key_organizationId: { key, organizationId: scope.orgId ?? null as unknown as string } },
+    where: { key_organizationId_costCenterId: { key, organizationId: scope.orgId ?? null as unknown as string, costCenterId: null as unknown as string } },
     create: {
       key,
       organizationId: scope.orgId,
