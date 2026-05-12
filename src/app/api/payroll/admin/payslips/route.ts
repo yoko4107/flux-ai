@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Generate failed" }, { status: 400 })
   }
-  const { draft, countryCode, currency, organizationId } = result
+  const { draft, countryCode, currency, organizationId, costCenterId } = result
 
   // Delete existing draft lines (cascade handles them on the payslip
   // delete) then re-create. Simpler than computing the diff.
@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
   const payslip = await prisma.payslip.create({
     data: {
       organizationId,
+      costCenterId,
       employeeId: parsed.data.employeeId,
       period: parsed.data.period,
       countryCode,

@@ -37,19 +37,40 @@ export async function GET(req: NextRequest) {
   })
   if (!orgId) return NextResponse.json({ error: "No organization" }, { status: 400 })
 
-  const country = new URL(req.url).searchParams.get("country")?.toUpperCase()
+  const url = new URL(req.url)
+  const country = url.searchParams.get("country")?.toUpperCase()
+  // costCenterId param semantics:
+  //   absent      → all rules for the org (per-CC + org-wide mixed)
+  //   "" / "ORG"  → org-wide fallback rules only (costCenterId IS NULL)
+  //   "<id>"      → rules for that specific cost center
+  const ccParam = url.searchParams.get("costCenterId")
   const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { countryCode: true } })
   const effectiveCountry = country ?? org?.countryCode ?? "ID"
 
+  const ccFilter =
+    ccParam === null ? {}
+    : ccParam === "" || ccParam === "ORG" ? { costCenterId: null }
+    : { costCenterId: ccParam }
+
   const rules = await prisma.countryPayrollRule.findMany({
-    where: { organizationId: orgId, countryCode: effectiveCountry },
+    where: { organizationId: orgId, countryCode: effectiveCountry, ...ccFilter },
     include: {
       component: true,
+      costCenter: { select: { id: true, code: true, name: true, currency: true } },
       brackets: { orderBy: { sortOrder: "asc" } },
     },
-    orderBy: { sortOrder: "asc" },
+    orderBy: [{ costCenterId: "asc" }, { sortOrder: "asc" }],
   })
-  return NextResponse.json({ rules, country: effectiveCountry })
+
+  // Also surface the org's cost centers so the UI can offer the picker
+  // without a second round-trip.
+  const costCenters = await prisma.costCenter.findMany({
+    where: { organizationId: orgId, active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, code: true, name: true, countryCode: true, currency: true },
+  })
+
+  return NextResponse.json({ rules, country: effectiveCountry, costCenters, scope: ccParam ?? null })
 }
 
 const BracketBody = z.object({
@@ -61,6 +82,8 @@ const BracketBody = z.object({
 const Body = z.object({
   countryCode: z.string().regex(/^[A-Z]{2}$/),
   componentId: z.string().min(1),
+  // null = org-wide fallback rule. Omit / undefined is treated the same.
+  costCenterId: z.string().nullable().optional(),
   enabled: z.boolean().optional().default(true),
   calculationType: z.enum(["FIXED", "PERCENT_BASE", "PERCENT_GROSS", "BRACKET", "FORMULA"]),
   fixedAmount: z.number().min(0).max(100_000_000).nullable().optional(),
@@ -86,12 +109,20 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => ({})))
   if (!parsed.success) return NextResponse.json({ error: "Invalid input", details: parsed.error.flatten() }, { status: 400 })
 
-  const { countryCode, componentId, enabled, calculationType, fixedAmount, percentage, formula, minAmount, maxAmount, sortOrder, brackets } = parsed.data
+  const { countryCode, componentId, costCenterId, enabled, calculationType, fixedAmount, percentage, formula, minAmount, maxAmount, sortOrder, brackets } = parsed.data
 
   // Verify the component exists (FK would catch this, but a 400 is nicer
   // than a 500).
   const component = await prisma.payrollComponent.findUnique({ where: { id: componentId } })
   if (!component) return NextResponse.json({ error: "Unknown payroll component" }, { status: 400 })
+
+  // If a cost center is supplied, make sure it belongs to this org.
+  if (costCenterId) {
+    const cc = await prisma.costCenter.findUnique({ where: { id: costCenterId }, select: { organizationId: true } })
+    if (!cc || cc.organizationId !== orgId) {
+      return NextResponse.json({ error: "Cost center not found in this organization" }, { status: 400 })
+    }
+  }
 
   // BRACKET rules need at least one bracket; other types ignore them.
   if (calculationType === "BRACKET" && (!brackets || brackets.length === 0)) {
@@ -106,35 +137,36 @@ export async function POST(req: NextRequest) {
     : component.type === "VOLUNTARY_DEDUCTION" ? 250
     : 350 // EMPLOYER_CONTRIBUTION
 
-  // Upsert the rule. Brackets are wiped + recreated to avoid stale ranges.
-  const rule = await prisma.countryPayrollRule.upsert({
-    where: { organizationId_countryCode_componentId: { organizationId: orgId, countryCode, componentId } },
-    update: {
-      enabled,
-      calculationType,
-      fixedAmount: fixedAmount ?? null,
-      percentage: percentage ?? null,
-      formula: formula ?? null,
-      minAmount: minAmount ?? null,
-      maxAmount: maxAmount ?? null,
-      sortOrder: sortOrder ?? defaultSort,
-      updatedById: session.user.id,
-    },
-    create: {
-      organizationId: orgId,
-      countryCode,
-      componentId,
-      enabled,
-      calculationType,
-      fixedAmount: fixedAmount ?? null,
-      percentage: percentage ?? null,
-      formula: formula ?? null,
-      minAmount: minAmount ?? null,
-      maxAmount: maxAmount ?? null,
-      sortOrder: sortOrder ?? defaultSort,
-      updatedById: session.user.id,
-    },
+  // The unique is (orgId, costCenterId, componentId) with NULLS NOT DISTINCT,
+  // but Prisma's upsert helper can't express NULL in a composite-unique
+  // lookup. Find-then-update-or-create manually.
+  const existing = await prisma.countryPayrollRule.findFirst({
+    where: { organizationId: orgId, componentId, costCenterId: costCenterId ?? null },
   })
+
+  const ruleData = {
+    enabled,
+    calculationType,
+    fixedAmount: fixedAmount ?? null,
+    percentage: percentage ?? null,
+    formula: formula ?? null,
+    minAmount: minAmount ?? null,
+    maxAmount: maxAmount ?? null,
+    sortOrder: sortOrder ?? defaultSort,
+    updatedById: session.user.id,
+  }
+
+  const rule = existing
+    ? await prisma.countryPayrollRule.update({ where: { id: existing.id }, data: ruleData })
+    : await prisma.countryPayrollRule.create({
+        data: {
+          organizationId: orgId,
+          countryCode,
+          componentId,
+          costCenterId: costCenterId ?? null,
+          ...ruleData,
+        },
+      })
 
   if (calculationType === "BRACKET") {
     await prisma.payrollBracket.deleteMany({ where: { ruleId: rule.id } })

@@ -230,6 +230,9 @@ model CostCenter {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   users          User[]   @relation("UserCostCenter")
+  payrollRules   CountryPayrollRule[] @relation("CostCenterPayrollRules")
+  compensations  EmployeeCompensation[] @relation("CostCenterCompensations")
+  payslips       Payslip[] @relation("CostCenterPayslips")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -812,6 +815,12 @@ model CountryPayrollRule {
   // ISO-3166-1 alpha-2. Org admins can scope rules per-country so a single
   // org running payroll across VN + ID + SA gets distinct configuration.
   countryCode     String
+  // Optional regional cost center scoping. null = org-wide fallback rule
+  // (applies to every employee unless overridden by a CC-specific rule).
+  // The engine resolves rules by (orgId, employee.costCenterId) → falls
+  // back to (orgId, null).
+  costCenterId    String?
+  costCenter      CostCenter? @relation("CostCenterPayrollRules", fields: [costCenterId], references: [id], onDelete: Cascade)
   componentId     String
   component       PayrollComponent @relation(fields: [componentId], references: [id])
   enabled         Boolean @default(true)
@@ -839,8 +848,13 @@ model CountryPayrollRule {
   updatedAt       DateTime @updatedAt
   updatedById     String?
 
-  @@unique([organizationId, countryCode, componentId])
+  // costCenterId is part of the key — two cost centers in the same org
+  // can define independent rules for the same component. nulls: NotDistinct
+  // makes the NULL bucket act as a single row (Postgres ≥15) so an
+  // org-wide fallback rule for a component is unique on its own.
+  @@unique([organizationId, costCenterId, componentId], map: "CountryPayrollRule_org_cc_comp_key")
   @@index([organizationId, countryCode])
+  @@index([organizationId, costCenterId])
 }
 
 // Progressive tax brackets attached to a CountryPayrollRule with
@@ -867,6 +881,11 @@ model EmployeeCompensation {
   id                 String   @id @default(cuid())
   organizationId     String
   organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Snapshot of the employee's cost center at the time the profile was
+  // last written. Used by the engine to select per-CC rules without a
+  // join through User on every calc.
+  costCenterId       String?
+  costCenter         CostCenter? @relation("CostCenterCompensations", fields: [costCenterId], references: [id], onDelete: SetNull)
   employeeId         String   @unique
   employee           User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   baseSalary         Decimal  @db.Decimal(15, 2)
@@ -913,6 +932,11 @@ model Payslip {
   id               String   @id @default(cuid())
   organizationId   String
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Snapshot of the employee's cost center at generate time. Survives a
+  // later re-assignment so historical payslips stay attributed to the
+  // region they were issued for.
+  costCenterId     String?
+  costCenter       CostCenter? @relation("CostCenterPayslips", fields: [costCenterId], references: [id], onDelete: SetNull)
   employeeId       String
   employee         User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   period           String   // YYYY-MM

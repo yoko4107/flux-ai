@@ -24,11 +24,21 @@ type Bracket = {
   rate: number
 }
 
+type CostCenter = {
+  id: string
+  code: string
+  name: string
+  countryCode: string
+  currency: string
+}
+
 type Rule = {
   id: string
   countryCode: string
   componentId: string
   component: Component
+  costCenterId: string | null
+  costCenter: { id: string; code: string; name: string; currency: string } | null
   enabled: boolean
   calculationType: "FIXED" | "PERCENT_BASE" | "PERCENT_GROSS" | "BRACKET" | "FORMULA"
   fixedAmount: string | null
@@ -50,7 +60,10 @@ const CALC_TYPES = [
 
 export default function AdminPayrollRulesPage() {
   const [country, setCountry] = useState<string>("")
+  // "" = all rules, "ORG" = org-wide fallback only, "<id>" = a specific CC
+  const [scope, setScope] = useState<string>("")
   const [rules, setRules] = useState<Rule[]>([])
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([])
   const [components, setComponents] = useState<Component[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -59,13 +72,17 @@ export default function AdminPayrollRulesPage() {
   async function load() {
     setLoading(true)
     try {
+      const qs = new URLSearchParams()
+      if (country) qs.set("country", country)
+      if (scope !== "") qs.set("costCenterId", scope) // "ORG" or "<id>"
       const [rRes, cRes] = await Promise.all([
-        fetch(`/api/payroll/admin/rules${country ? `?country=${country}` : ""}`),
+        fetch(`/api/payroll/admin/rules?${qs}`),
         fetch("/api/payroll/components"),
       ])
       const r = await rRes.json()
       const c = await cRes.json()
       setRules(r.rules ?? [])
+      setCostCenters(r.costCenters ?? [])
       if (!country && r.country) setCountry(r.country)
       setComponents(c.components ?? [])
     } finally {
@@ -73,7 +90,7 @@ export default function AdminPayrollRulesPage() {
     }
   }
   useEffect(() => { load() }, []) // initial
-  useEffect(() => { if (country) load() }, [country]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (country) load() }, [country, scope]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveRule(rule: Rule) {
     setSaving(rule.id)
@@ -84,6 +101,7 @@ export default function AdminPayrollRulesPage() {
         body: JSON.stringify({
           countryCode: rule.countryCode,
           componentId: rule.componentId,
+          costCenterId: rule.costCenterId,
           enabled: rule.enabled,
           calculationType: rule.calculationType,
           fixedAmount: rule.fixedAmount != null ? Number(rule.fixedAmount) : null,
@@ -146,9 +164,9 @@ export default function AdminPayrollRulesPage() {
 
       <div className="rounded-xl border border-gray-200 bg-white">
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Sliders className="h-4 w-4 text-gray-500" />
-            <h2 className="text-sm font-semibold text-gray-900">Country rules</h2>
+            <h2 className="text-sm font-semibold text-gray-900">Payroll rules</h2>
             <label className="text-xs text-gray-500 ml-3">
               Country
               <input
@@ -157,6 +175,20 @@ export default function AdminPayrollRulesPage() {
                 placeholder="ID"
                 className="ml-2 inline-block w-16 rounded border border-gray-300 px-2 py-1 font-mono text-xs uppercase"
               />
+            </label>
+            <label className="text-xs text-gray-500">
+              Scope
+              <select
+                value={scope}
+                onChange={(e) => setScope(e.target.value)}
+                className="ml-2 rounded border border-gray-300 px-2 py-1 text-xs"
+              >
+                <option value="">All (per-CC + fallback)</option>
+                <option value="ORG">Org-wide fallback only</option>
+                {costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.code} · {c.currency})</option>
+                ))}
+              </select>
             </label>
           </div>
           <button
@@ -180,7 +212,11 @@ export default function AdminPayrollRulesPage() {
               <NewRuleRow
                 country={country}
                 components={components}
-                existing={rules.map((r) => r.componentId)}
+                // Only block components already configured for *this same scope* —
+                // a component can have an org-wide rule AND a per-CC override.
+                existing={rules.filter((r) => (r.costCenterId ?? "ORG") === (scope || "ORG")).map((r) => r.componentId)}
+                scope={scope}
+                costCenters={costCenters}
                 onCancel={() => setAdding(false)}
                 onSaved={() => { setAdding(false); load() }}
               />
@@ -221,12 +257,21 @@ function RuleRow({
     <div className="p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-gray-900">{rule.component.name}</span>
             <span className="font-mono text-[10px] uppercase tracking-wider text-gray-500">{rule.component.code}</span>
             <TypeBadge type={rule.component.type} />
             {!rule.component.isTaxable && (
               <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">non-taxable</span>
+            )}
+            {rule.costCenter ? (
+              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 ring-1 ring-blue-200">
+                {rule.costCenter.name} · {rule.costCenter.currency}
+              </span>
+            ) : (
+              <span className="rounded-full bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-600 ring-1 ring-gray-200">
+                Org-wide fallback
+              </span>
             )}
           </div>
         </div>
@@ -398,12 +443,16 @@ function NewRuleRow({
   country,
   components,
   existing,
+  scope,
+  costCenters,
   onCancel,
   onSaved,
 }: {
   country: string
   components: Component[]
   existing: string[]
+  scope: string
+  costCenters: CostCenter[]
   onCancel: () => void
   onSaved: () => void
 }) {
@@ -412,6 +461,11 @@ function NewRuleRow({
   const [calc, setCalc] = useState<Rule["calculationType"]>("FIXED")
   const [fixedAmount, setFixedAmount] = useState<string>("")
   const [percentage, setPercentage] = useState<string>("")
+  // If admin is viewing "All", default the new rule to org-wide; otherwise
+  // attach it to the scope they're filtered to (CC id or "ORG"/empty).
+  const [targetCC, setTargetCC] = useState<string>(
+    scope === "" ? "ORG" : scope
+  )
   const [busy, setBusy] = useState(false)
 
   async function save() {
@@ -424,6 +478,7 @@ function NewRuleRow({
         body: JSON.stringify({
           countryCode: country,
           componentId,
+          costCenterId: targetCC === "ORG" ? null : targetCC,
           enabled: true,
           calculationType: calc,
           fixedAmount: calc === "FIXED" && fixedAmount ? Number(fixedAmount) : null,
@@ -462,6 +517,19 @@ function NewRuleRow({
             className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
           >
             {available.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+          </select>
+        </label>
+        <label className="block md:col-span-2">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">Applies to</span>
+          <select
+            value={targetCC}
+            onChange={(e) => setTargetCC(e.target.value)}
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="ORG">Org-wide fallback (all employees)</option>
+            {costCenters.map((c) => (
+              <option key={c.id} value={c.id}>{c.name} ({c.code} · {c.currency})</option>
+            ))}
           </select>
         </label>
         <label className="block">

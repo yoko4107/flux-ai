@@ -68,6 +68,8 @@ export async function PUT(
   const parsed = Body.safeParse(await req.json().catch(() => ({})))
   if (!parsed.success) return NextResponse.json({ error: "Invalid input", details: parsed.error.flatten() }, { status: 400 })
 
+  // Snapshot the employee's current cost center on the comp profile so
+  // the calc engine can resolve per-CC rules without a join on every run.
   const compensation = await prisma.employeeCompensation.upsert({
     where: { employeeId },
     update: {
@@ -76,6 +78,7 @@ export async function PUT(
       workingDaysPerMonth: parsed.data.workingDaysPerMonth,
       startedAt: new Date(parsed.data.startedAt),
       endedAt: parsed.data.endedAt ? new Date(parsed.data.endedAt) : null,
+      costCenterId: employee.costCenterId ?? null,
       // Prisma's nullable JSON requires the magic sentinel rather than
       // literal `null` (which sets undefined behaviour). Pass undefined
       // to leave the column unchanged when no overrides supplied.
@@ -83,6 +86,7 @@ export async function PUT(
     },
     create: {
       organizationId: employee.organizationId,
+      costCenterId: employee.costCenterId ?? null,
       employeeId,
       baseSalary: parsed.data.baseSalary,
       currency: parsed.data.currency,
