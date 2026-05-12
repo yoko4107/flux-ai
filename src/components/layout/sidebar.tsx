@@ -21,6 +21,7 @@ import {
   Palette,
   CalendarDays,
   Wallet,
+  Banknote,
 } from "lucide-react"
 
 type NavItem = {
@@ -54,6 +55,12 @@ const navItems: NavItem[] = [
     title: "Leave & Calendar",
     href: "/employee/leave",
     icon: <CalendarDays className="h-4 w-4" />,
+    roles: ["EMPLOYEE"],
+  },
+  {
+    title: "Payroll",
+    href: "/employee/payroll",
+    icon: <Banknote className="h-4 w-4" />,
     roles: ["EMPLOYEE"],
   },
   // Approver
@@ -135,6 +142,12 @@ const navItems: NavItem[] = [
     title: "Per Diem",
     href: "/admin/per-diem",
     icon: <Wallet className="h-4 w-4" />,
+    roles: ["ADMIN"],
+  },
+  {
+    title: "Payroll",
+    href: "/admin/payroll",
+    icon: <Banknote className="h-4 w-4" />,
     roles: ["ADMIN"],
   },
 ]
