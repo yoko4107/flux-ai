@@ -3,8 +3,21 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   Loader2, Plus, Save, Trash2, Building2, Users as UsersIcon,
-  Power, UserPlus, Pencil, X, ChevronDown, ChevronRight,
+  Power, UserPlus, X, ChevronDown, ChevronRight,
 } from "lucide-react"
+
+const STATUS_CLASSES = {
+  ACTIVE: "bg-green-100 text-green-700",
+  INACTIVE: "bg-gray-100 text-gray-500",
+  PENDING: "bg-yellow-100 text-yellow-700",
+}
+function StatusBadge({ status }: { status: "ACTIVE" | "INACTIVE" | "PENDING" }) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASSES[status]}`}>
+      {status.charAt(0) + status.slice(1).toLowerCase()}
+    </span>
+  )
+}
 
 type CostCenter = {
   id: string
@@ -169,7 +182,6 @@ function CostCenterCard({
   const [editMember, setEditMember] = useState<UserRow | null>(null)
 
   const employees = useMemo(() => users.filter((u) => u.role === "EMPLOYEE"), [users])
-  const staffRoles = useMemo(() => users.filter((u) => u.role !== "EMPLOYEE"), [users])
 
   return (
     <article className={`rounded-xl border bg-white ${cc.active ? "border-gray-200" : "border-gray-200 opacity-75"}`}>
@@ -267,68 +279,64 @@ function CostCenterCard({
         </div>
 
         {membersOpen && (
-          <div className="bg-gray-50/40 px-5 pb-3">
+          <div className="pb-3">
             {addingMember && (
-              <AddMemberForm
-                costCenterId={cc.id}
-                onCancel={() => setAddingMember(false)}
-                onSaved={() => { setAddingMember(false); onRefresh() }}
-              />
+              <div className="px-5 pb-2">
+                <AddMemberForm
+                  costCenterId={cc.id}
+                  onCancel={() => setAddingMember(false)}
+                  onSaved={() => { setAddingMember(false); onRefresh() }}
+                />
+              </div>
             )}
             {employees.length === 0 && !addingMember ? (
-              <p className="py-3 text-xs text-gray-400">No employees yet. Add one above.</p>
+              <p className="px-5 py-3 text-xs text-gray-400">No employees yet. Click "Add employee" to get started.</p>
             ) : (
-              <ul className="divide-y divide-gray-100">
-                {employees.map((u) => (
-                  <li key={u.id}>
-                    {editMember?.id === u.id ? (
-                      <EditMemberRow
-                        user={u}
-                        onCancel={() => setEditMember(null)}
-                        onSaved={() => { setEditMember(null); onRefresh() }}
-                        onRemove={() => { setEditMember(null); onRefresh() }}
-                      />
-                    ) : (
-                      <div className="flex items-center justify-between py-2">
-                        <div>
-                          <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
-                          <p className="text-[11px] text-gray-500">
-                            {u.email}
-                            {u.department ? ` · ${u.department}` : ""}
-                            {u.status !== "ACTIVE" && (
-                              <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] ${u.status === "INACTIVE" ? "bg-gray-100 text-gray-500" : "bg-yellow-100 text-yellow-700"}`}>
-                                {u.status.toLowerCase()}
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => setEditMember(u)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {staffRoles.length > 0 && (
-              <div className="mt-2 border-t border-gray-100 pt-2">
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                  Staff with elevated roles
-                  <span className="ml-1 font-normal normal-case">(manage in <a href="/admin/config" className="underline">Configuration</a>)</span>
-                </p>
-                <ul className="space-y-0.5">
-                  {staffRoles.map((u) => (
-                    <li key={u.id} className="flex items-center gap-2 text-[11px] text-gray-500">
-                      <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">{u.role}</span>
-                      {u.name ?? u.email}
-                    </li>
-                  ))}
-                </ul>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-500">Name</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Email</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Department</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Status</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {employees.map((u) => (
+                      <tr key={u.id} className="hover:bg-gray-50/60">
+                        {editMember?.id === u.id ? (
+                          <td colSpan={5} className="px-5 py-2">
+                            <EditMemberRow
+                              user={u}
+                              onCancel={() => setEditMember(null)}
+                              onSaved={() => { setEditMember(null); onRefresh() }}
+                              onRemove={() => { setEditMember(null); onRefresh() }}
+                            />
+                          </td>
+                        ) : (
+                          <>
+                            <td className="px-5 py-2.5 font-medium text-gray-900">{u.name ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-gray-500">{u.email}</td>
+                            <td className="px-4 py-2.5 text-gray-500">{u.department ?? "—"}</td>
+                            <td className="px-4 py-2.5">
+                              <StatusBadge status={u.status} />
+                            </td>
+                            <td className="px-4 py-2.5 text-right">
+                              <button
+                                onClick={() => setEditMember(u)}
+                                className="rounded px-2 py-1 text-xs text-gray-500 border border-gray-200 hover:bg-gray-100"
+                              >
+                                Edit
+                              </button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
