@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { rateLimit } from "@/lib/rate-limit"
 import { getOrgBaseCurrency } from "@/lib/org-currency"
+import { getCostCenterScope } from "@/lib/finance-scope"
 
 interface ReportRow {
   requestId: string
@@ -22,12 +23,15 @@ interface ReportRow {
   title: string
 }
 
-async function getMonthlyData(month: string, orgId: string): Promise<ReportRow[]> {
+async function getMonthlyData(month: string, orgId: string, costCenterId: string | null): Promise<ReportRow[]> {
   const requests = await prisma.reimbursementRequest.findMany({
     where: {
       status: { in: ["APPROVED", "PAID"] },
       month,
-      employee: { organizationId: orgId },
+      employee: {
+        organizationId: orgId,
+        ...(costCenterId ? { costCenterId } : {}),
+      },
     },
     include: {
       employee: { select: { id: true, name: true, email: true, department: true } },
@@ -206,7 +210,8 @@ export async function POST(req: NextRequest) {
 
   const orgId = session.user.organizationId ?? "__none__"
   const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
-  const data = await getMonthlyData(month, orgId)
+  const { costCenterId } = await getCostCenterScope(session.user.id)
+  const data = await getMonthlyData(month, orgId, costCenterId)
 
   // Build naming: RI_Name_Month_Year (e.g. RI_Yoko_March_2026)
   const [yearStr, monthStr] = month.split("-")

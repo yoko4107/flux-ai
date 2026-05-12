@@ -7,6 +7,7 @@ import { convert } from "@/lib/fx-rates"
 import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category, Prisma } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
+import { filterCommitteeForRequester } from "@/lib/approval-routing"
 import { writeFile, mkdir } from "fs/promises"
 import path from "path"
 
@@ -290,7 +291,8 @@ export async function POST(req: NextRequest) {
         const committeeValue = (await getConfig(prisma, "approvalCommittee", session.user.organizationId)) as {
           members?: Array<{ userId: string; order: number }>
         } | null
-        const members = committeeValue?.members ?? []
+        const rawMembers = committeeValue?.members ?? []
+        const { members } = await filterCommitteeForRequester(session.user.id, rawMembers)
 
         if (members.length > 0) {
           const stepData = members

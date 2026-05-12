@@ -6,15 +6,24 @@ import { prisma } from "@/lib/prisma"
 import { DollarSign, FileCheck, Clock, FileSpreadsheet } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StatusBadge, type RequestStatus } from "@/components/status-badge"
+import { getCostCenterScope } from "@/lib/finance-scope"
 
 export default async function FinanceDashboard() {
   const currentMonth = new Date().toISOString().slice(0, 7)
 
+  // Regional Finance users only see numbers from their cost center.
+  // Org-wide Finance (no CC) and ADMIN see everything.
+  const session = await auth()
+  const { costCenterId } = session?.user?.id
+    ? await getCostCenterScope(session.user.id)
+    : { costCenterId: null as string | null }
+  const employeeScope = costCenterId ? { costCenterId } : {}
+
   const [approvedUnpaid, paid, totalApproved, lastExport, recentApprovedUnpaid] = await Promise.all([
-    prisma.reimbursementRequest.count({ where: { status: "APPROVED" } }),
-    prisma.reimbursementRequest.count({ where: { status: "PAID", month: currentMonth } }),
+    prisma.reimbursementRequest.count({ where: { status: "APPROVED", employee: employeeScope } }),
+    prisma.reimbursementRequest.count({ where: { status: "PAID", month: currentMonth, employee: employeeScope } }),
     prisma.reimbursementRequest.aggregate({
-      where: { status: { in: ["APPROVED", "PAID"] }, month: currentMonth },
+      where: { status: { in: ["APPROVED", "PAID"] }, month: currentMonth, employee: employeeScope },
       _sum: { amount: true },
     }),
     // Last export for current month
@@ -24,7 +33,7 @@ export default async function FinanceDashboard() {
     }),
     // 5 most recent APPROVED-but-unpaid requests
     prisma.reimbursementRequest.findMany({
-      where: { status: "APPROVED" },
+      where: { status: "APPROVED", employee: employeeScope },
       include: { employee: { select: { name: true } } },
       orderBy: { updatedAt: "desc" },
       take: 5,

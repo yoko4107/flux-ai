@@ -8,29 +8,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Count APPROVED (unpaid) requests
-  const approvedUnpaid = await prisma.reimbursementRequest.count({
-    where: { status: "APPROVED" },
-  })
-
-  if (approvedUnpaid === 0) {
-    return NextResponse.json({ financeUsersNotified: 0, approvedUnpaid: 0 })
-  }
-
-  // Get total amount awaiting payment
-  const totalAmount = await prisma.reimbursementRequest.aggregate({
-    where: { status: "APPROVED" },
-    _sum: { amount: true },
-  })
-
+  // Each finance user is digested over the slice of approved-unpaid work
+  // they're actually responsible for: their cost center, or org-wide if
+  // they have no CC assigned.
   const financeUsers = await prisma.user.findMany({
     where: { role: "FINANCE" },
-    select: { id: true, name: true, email: true },
+    select: { id: true, name: true, email: true, costCenterId: true },
   })
 
   let notifiedCount = 0
 
   for (const finUser of financeUsers) {
+    const employeeScope = finUser.costCenterId ? { costCenterId: finUser.costCenterId } : {}
+    const approvedUnpaid = await prisma.reimbursementRequest.count({
+      where: { status: "APPROVED", employee: employeeScope },
+    })
+    if (approvedUnpaid === 0) continue
+    const totalAmount = await prisma.reimbursementRequest.aggregate({
+      where: { status: "APPROVED", employee: employeeScope },
+      _sum: { amount: true },
+    })
     // Try to send email via Resend if configured
     if (
       process.env.RESEND_API_KEY &&
@@ -71,5 +68,5 @@ export async function GET(req: NextRequest) {
     notifiedCount++
   }
 
-  return NextResponse.json({ financeUsersNotified: notifiedCount, approvedUnpaid })
+  return NextResponse.json({ financeUsersNotified: notifiedCount })
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { sendNotification } from "@/lib/notifications"
 import { getConfig } from "@/lib/config"
+import { filterCommitteeForRequester } from "@/lib/approval-routing"
 
 export async function GET(req: NextRequest) {
   // Verify cron secret
@@ -59,7 +60,8 @@ export async function GET(req: NextRequest) {
       const committeeValue = (await getConfig(prisma, "approvalCommittee", draft.employee.organizationId)) as {
         members?: Array<{ userId: string; order: number }>
       } | null
-      const members = committeeValue?.members ?? []
+      const rawMembers = committeeValue?.members ?? []
+      const { members } = await filterCommitteeForRequester(draft.employeeId, rawMembers)
 
       // Update status to SUBMITTED
       await prisma.reimbursementRequest.update({

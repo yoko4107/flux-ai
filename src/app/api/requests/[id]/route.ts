@@ -7,6 +7,7 @@ import { convert } from "@/lib/fx-rates"
 import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
+import { filterCommitteeForRequester } from "@/lib/approval-routing"
 
 export async function GET(
   _req: NextRequest,
@@ -202,7 +203,10 @@ export async function PATCH(
       mode?: string
       members?: Array<{ userId: string; order: number }>
     } | null
-    const members = committeeValue?.members ?? []
+    const rawMembers = committeeValue?.members ?? []
+    // Scope to requester (== request.employee, since only the owner can
+    // submit a draft).
+    const { members } = await filterCommitteeForRequester(request.employeeId, rawMembers)
 
     if (members.length > 0) {
       const approverIds = members.map((m) => m.userId)

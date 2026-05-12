@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrgBaseCurrency } from "@/lib/org-currency"
+import { getCostCenterScope } from "@/lib/finance-scope"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -25,11 +26,18 @@ export async function GET(req: NextRequest) {
   const orgId = session.user.organizationId ?? "__none__"
   const baseCurrency = await getOrgBaseCurrency(session.user.organizationId)
 
+  // Regional Finance users only see requests from their cost center;
+  // ADMIN and org-wide Finance (no costCenter) see everything in the org.
+  const { costCenterId } = await getCostCenterScope(session.user.id)
+
   const requests = await prisma.reimbursementRequest.findMany({
     where: {
       status: { in: ["APPROVED", "PAID"] },
       month,
-      employee: { organizationId: orgId },
+      employee: {
+        organizationId: orgId,
+        ...(costCenterId ? { costCenterId } : {}),
+      },
     },
     include: {
       employee: { select: { id: true, name: true, email: true, department: true } },

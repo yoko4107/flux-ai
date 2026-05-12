@@ -7,6 +7,7 @@ import { convert } from "@/lib/fx-rates"
 import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category, RequestStatus } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
+import { filterCommitteeForRequester } from "@/lib/approval-routing"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -161,7 +162,10 @@ export async function POST(req: NextRequest) {
       mode?: string
       members?: Array<{ userId: string; order: number }>
     } | null
-    const members = committeeValue?.members ?? []
+    const rawMembers = committeeValue?.members ?? []
+    // Scope the committee to the requester's cost center (members in the
+    // same CC or org-wide approvers with no CC).
+    const { members } = await filterCommitteeForRequester(session.user.id, rawMembers)
 
     if (members.length > 0) {
       const approverIds = members.map((m) => m.userId)
