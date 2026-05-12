@@ -201,6 +201,10 @@ model Organization {
   leaveBalanceAdjustments LeaveBalanceAdjustment[]
   companyEvents   CompanyEvent[]
   perDiemRequests PerDiemRequest[]
+  countryPayrollRules CountryPayrollRule[]
+  employeeCompensations EmployeeCompensation[]
+  payrollAdjustments PayrollAdjustment[]
+  payslips Payslip[]
 }
 
 model User {
@@ -240,6 +244,9 @@ model User {
   supervisedLeaves     LeaveRequest[]   @relation("SupervisorLeave")
   perDiemRequests      PerDiemRequest[] @relation("EmployeePerDiem")
   supervisedPerDiems   PerDiemRequest[] @relation("SupervisorPerDiem")
+  compensation         EmployeeCompensation?
+  payrollAdjustments   PayrollAdjustment[]
+  payslips             Payslip[]
   leaveProposals       LeaveProposal[]
   overtimeRecords      OvertimeRecord[] @relation("EmployeeOT")
   supervisedOvertime   OvertimeRecord[] @relation("SupervisorOT")
@@ -737,4 +744,184 @@ model PerDiemItem {
   createdAt   DateTime       @default(now())
 
   @@index([requestId])
+}
+
+// ---------------------------------------------------------------------------
+// Payroll
+// ---------------------------------------------------------------------------
+
+// Global library of payroll components, shared across all orgs. Country
+// rules reference these by `code` so adding a country doesn't require
+// duplicating the catalogue. Seeded with the standard set in
+// scripts/seed-payroll-components.ts.
+model PayrollComponent {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  // EARNING | STATUTORY_DEDUCTION | VOLUNTARY_DEDUCTION | EMPLOYER_CONTRIBUTION
+  type        String
+  // Whether this earning counts toward taxable income (false for non-taxable
+  // allowances like de-minimis stipends). Ignored for non-EARNING types.
+  isTaxable   Boolean @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+
+  countryRules CountryPayrollRule[]
+}
+
+// Per-org, per-country, per-component rule. Drives the calc engine: how
+// to compute the line for this component when running payroll for a given
+// employee in a given country.
+model CountryPayrollRule {
+  id              String  @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // ISO-3166-1 alpha-2. Org admins can scope rules per-country so a single
+  // org running payroll across VN + ID + SA gets distinct configuration.
+  countryCode     String
+  componentId     String
+  component       PayrollComponent @relation(fields: [componentId], references: [id])
+  enabled         Boolean @default(true)
+  // FIXED       — fixed amount in the country's currency
+  // PERCENT_BASE  — percentage of base salary
+  // PERCENT_GROSS — percentage of gross pay
+  // BRACKET       — progressive tax brackets (see PayrollBracket)
+  // FORMULA       — string formula evaluated by the engine
+  calculationType String
+  // Stored as Decimal so cents don't drift. Sense depends on calculationType:
+  fixedAmount     Decimal? @db.Decimal(15, 2)
+  // Percentage as decimal: 0.05 means 5%.
+  percentage      Decimal? @db.Decimal(8, 6)
+  // For FORMULA — variables: BASE, GROSS, TAXABLE, plus any other component
+  // codes already computed. Evaluated by the engine sandbox.
+  formula         String?
+  // Optional caps applied after the calculation (e.g. SS contribution
+  // capped at the per-month ceiling).
+  minAmount       Decimal? @db.Decimal(15, 2)
+  maxAmount       Decimal? @db.Decimal(15, 2)
+  // Lower runs first. Earnings 0–99, statutory 100–199, voluntary 200–299
+  // is the convention.
+  sortOrder       Int @default(100)
+  brackets        PayrollBracket[]
+  updatedAt       DateTime @updatedAt
+  updatedById     String?
+
+  @@unique([organizationId, countryCode, componentId])
+  @@index([organizationId, countryCode])
+}
+
+// Progressive tax brackets attached to a CountryPayrollRule with
+// calculationType = BRACKET. Rate is decimal (0.10 = 10%).
+model PayrollBracket {
+  id        String @id @default(cuid())
+  ruleId    String
+  rule      CountryPayrollRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  // Inclusive lower bound on taxable income.
+  minAmount Decimal @db.Decimal(15, 2)
+  // Exclusive upper bound on taxable income; null = unbounded (top bracket).
+  maxAmount Decimal? @db.Decimal(15, 2)
+  rate      Decimal @db.Decimal(5, 4)
+  sortOrder Int
+
+  @@index([ruleId, sortOrder])
+}
+
+// Per-employee compensation profile. The base salary feeds every
+// percentage-based calculation; per-component overrides supplement
+// or replace the country rule's defaults (e.g. a higher housing
+// allowance for an executive).
+model EmployeeCompensation {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId         String   @unique
+  employee           User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  baseSalary         Decimal  @db.Decimal(15, 2)
+  currency           String
+  // Used for pro-rata: the count of working days the employee was paid
+  // in a typical month (defaults to 22 — admin can override per employee).
+  workingDaysPerMonth Int     @default(22)
+  startedAt          DateTime
+  endedAt            DateTime?
+  // JSON map { COMPONENT_CODE: amount }. Amounts are in the employee's
+  // currency. When set, this OVERRIDES the country rule's calculation
+  // for that component; when absent, the country rule applies.
+  componentOverrides Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+// One-off adjustments for a specific pay period (bonus, commission,
+// unpaid-leave deduction, etc.). The calc engine adds these on top of
+// the country-rule + override-driven baseline.
+model PayrollAdjustment {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period         String   // YYYY-MM
+  componentCode  String   // matches PayrollComponent.code
+  // Positive = adds to gross / earnings, negative = deduction.
+  amount         Decimal  @db.Decimal(15, 2)
+  description    String?  @db.Text
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, period])
+  @@index([employeeId, period])
+}
+
+// Generated payslip for an employee + pay period. Headline figures are
+// stored alongside the line breakdown so YTD totals are a fast Σ.
+model Payslip {
+  id               String   @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId       String
+  employee         User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  period           String   // YYYY-MM
+  countryCode      String
+  currency         String
+  // Pro-rata bookkeeping.
+  workingDays      Int
+  paidDays         Int
+  // Headline numbers — frozen at finalize so subsequent rule changes
+  // don't retroactively alter approved payslips.
+  grossPay         Decimal  @db.Decimal(15, 2)
+  taxableIncome    Decimal  @db.Decimal(15, 2)
+  totalDeductions  Decimal  @db.Decimal(15, 2)
+  netPay           Decimal  @db.Decimal(15, 2)
+  // Employer-side contributions tracked separately so they don't roll
+  // into net pay.
+  employerCost     Decimal  @db.Decimal(15, 2) @default(0)
+  // DRAFT | FINALIZED | PAID — DRAFT can be regenerated, the others are immutable.
+  status           String   @default("DRAFT")
+  generatedAt      DateTime @default(now())
+  finalizedAt      DateTime?
+  paidAt           DateTime?
+  notes            String?  @db.Text
+  lines            PayslipLine[]
+
+  @@unique([employeeId, period])
+  @@index([organizationId, period])
+  @@index([organizationId, status])
+}
+
+model PayslipLine {
+  id            String   @id @default(cuid())
+  payslipId     String
+  payslip       Payslip  @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  componentCode String
+  componentName String
+  // Mirrors PayrollComponent.type — duplicated so old payslips render
+  // correctly even if the master component is renamed/retired.
+  type          String
+  amount        Decimal  @db.Decimal(15, 2)
+  description   String?
+  sortOrder     Int
+
+  @@index([payslipId])
 }
