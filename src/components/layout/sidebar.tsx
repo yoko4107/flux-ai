@@ -14,7 +14,6 @@ import {
   CheckSquare,
   DollarSign,
   Settings,
-  Users,
   BarChart3,
   FileCheck,
   Mail,
@@ -109,13 +108,7 @@ const navItems: NavItem[] = [
     roles: ["ADMIN"],
   },
   {
-    title: "Users",
-    href: "/admin/users",
-    icon: <Users className="h-4 w-4" />,
-    roles: ["ADMIN"],
-  },
-  {
-    title: "Cost Centers",
+    title: "User Cost Center",
     href: "/admin/cost-centers",
     icon: <MapPin className="h-4 w-4" />,
     roles: ["ADMIN"],
