@@ -26,7 +26,7 @@
 ## Phases
 
 - [x] **Phase 1: Cost Center Config Scoping** — Add CC selector to config page; wire all settings to per-CC (completed 2026-05-13)
-- [ ] **Phase 2: Per-CC Approval Workflow** — Scope existing approval committee per cost center
+- [~] **Phase 2: Per-CC Approval Workflow** — Fix approval routing bugs (plan 01 done); finance officer + preview TBD (plan 02)
 - [ ] **Phase 3: Per-CC Policies & Deadlines** — Scope spending limits and deadlines per CC
 - [ ] **Phase 4: Custom Expense Categories** — Free-text custom categories added to AdminConfig JSON
 - [ ] **Phase 5: Validation & Polish** — Unsaved-changes warning, validation, preview, enforcement check
@@ -88,7 +88,7 @@ Plans:
 3. Reimbursement approval routing reads the submitter's CC config
 4. Approval workflow preview shows "This applies to [CC Name]"
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 02-01-fix-approval-routing-PLAN.md — Fix POST /api/requests to use CC-scoped committee; fix approvers[] shape mismatch; fix parallel notification
 - [ ] 02-02-finance-officer-preview-PLAN.md — Add financeOfficer AdminConfig key per CC; Finance Officer select UI; WorkflowPreviewCard
@@ -263,7 +263,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Cost Center Config Scoping | 2/2 | Complete    | 2026-05-13 |
-| 2. Per-CC Approval Workflow | 0/2 | Not started | — |
+| 2. Per-CC Approval Workflow | 2/2 | Complete   | 2026-05-13 |
 | 3. Per-CC Policies & Deadlines | 0/1 | Not started | — |
 | 4. Custom Expense Categories | 0/1 | Not started | — |
 | 5. Validation & Polish | 0/1 | Not started | — |

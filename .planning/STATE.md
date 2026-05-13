@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 01-cost-center-config-scoping 02-ui-cc-selector-PLAN.md
-last_updated: "2026-05-13T06:04:58.726Z"
+stopped_at: Completed 02-per-cc-approval-workflow 02-02-finance-officer-preview-PLAN.md
+last_updated: "2026-05-13T07:16:34.671Z"
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
   percent: 100
 ---
 
@@ -35,13 +35,14 @@ Admins can configure all reimbursement rules per cost center without technical s
 
 ## Current Position
 
-**Phase:** Phase 1 — Cost Center Config Scoping (2/2 plans complete)  
+**Phase:** Phase 2 — Per-CC Approval Workflow (2/2 plans complete)  
 **Milestone:** System Configuration v1  
 **Progress:** [██████████] 100%
 
 ```
 Roadmap: ████████████████████████ 100% (structure complete)
 Phase 1:  ████████████████████████ 100% (2/2 plans done)
+Phase 2:  ████████████████████████ 100% (2/2 plans done)
 ```
 
 ---
@@ -51,7 +52,7 @@ Phase 1:  ███████████████████████�
 | Phase | Name | Requirements | Status | Est. Plans |
 |-------|------|--------------|--------|-----------|
 | 1 | Foundation | 4 | Complete (2/2 plans) | 2 |
-| 2 | Approval Workflows | 7 | Not started | 1 |
+| 2 | Approval Workflows | 7 | Complete (2/2 plans) | 2 |
 | 3 | Spending Policies | 5 | Not started | 1 |
 | 4 | Expense Categories | 6 | Not started | 1 |
 | 5 | Role Management | 6 | Not started | 1 |
@@ -77,6 +78,11 @@ Phase 1:  ███████████████████████�
 | Shared CostCenterSelector at src/components/admin/ — additive, payroll original unchanged | Locked | ✓ No breaking changes to existing pages |
 | Two separate useEffects: CC list (mount-only), config (selectedCC?.id dep) | Locked | ✓ Prevents config fetch before CCs arrive |
 | costCenterId passed at saveConfig call time — not captured in closure | Locked | ✓ Avoids stale null before CC loads |
+| Extract resolveCommittee/buildApprovalSteps/selectNotifyTargets as pure helpers | Locked | ✓ Unit testable without DB connection |
+| Remove filterCommitteeForRequester — per-CC getConfig resolution replaces it | Locked | ✓ Simpler, correct CC scoping |
+| derivePreviewSteps extracted as pure helper in workflow-preview-helpers.ts | Locked | ✓ Testable without React renderer |
+| Config API GET/PUT extended with costCenterId param | Locked | ✓ Required for CC-scoped financeOfficer storage |
+| financeOfficer key in AdminConfig VALID_KEYS + Zod schema | Locked | ✓ Accepts per-CC finance officer designation |
 
 ---
 
@@ -118,8 +124,8 @@ Phase 1:  ███████████████████████�
 
 ## Next Steps
 
-1. Phase 1 complete — proceed to Phase 2: Per-CC Approval Workflow
-2. Phase 2 will add per-CC approval workflow configuration (sequential vs. parallel, approver assignment per CC)
+1. Phase 2 complete (APPR-01 through APPR-07 all satisfied) — proceed to Phase 3: Spending Policies
+2. Phase 3 will add per-CC spending limits and policy enforcement at submission time
 
 ---
 
@@ -127,7 +133,7 @@ Phase 1:  ███████████████████████�
 
 **Last Updated:** 2026-05-13 (Plan 02 execution)  
 **Last Editor:** Claude (executor)  
-**Stopped At:** Completed 01-cost-center-config-scoping 02-ui-cc-selector-PLAN.md  
+**Stopped At:** Completed 02-per-cc-approval-workflow 02-02-finance-officer-preview-PLAN.md
 **Branch:** claude/dreamy-jones-22d72f  
 **Mode:** yolo (with plan_check, verifier, nyquist_validation workflows enabled)
 

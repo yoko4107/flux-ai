@@ -14,13 +14,13 @@
 
 ### Approval Workflow Configuration
 
-- [ ] **APPR-01**: Admin can select approval mode (Sequential or Parallel)
-- [ ] **APPR-02**: Admin can add Approver 1 to approval committee
-- [ ] **APPR-03**: Admin can add Approver 2 to approval committee (optional)
-- [ ] **APPR-04**: Admin can remove approvers from committee
-- [ ] **APPR-05**: Admin can promote an employee to Approver role
-- [ ] **APPR-06**: Admin can demote an approver back to employee role
-- [ ] **APPR-07**: System displays approval workflow preview (how approvals will flow)
+- [x] **APPR-01**: Admin can select approval mode (Sequential or Parallel)
+- [x] **APPR-02**: Admin can add Approver 1 to approval committee
+- [x] **APPR-03**: Admin can add Approver 2 to approval committee (optional)
+- [x] **APPR-04**: Admin can remove approvers from committee
+- [x] **APPR-05**: Admin can promote an employee to Approver role
+- [x] **APPR-06**: Admin can demote an approver back to employee role
+- [x] **APPR-07**: System displays approval workflow preview (how approvals will flow)
 
 ### Spending Limits & Thresholds
 
@@ -127,13 +127,13 @@
 | NAV-02 | 1 | Complete |
 | NAV-03 | 1 | Complete |
 | NAV-04 | 1 | Complete |
-| APPR-01 | 2 | Pending |
-| APPR-02 | 2 | Pending |
-| APPR-03 | 2 | Pending |
-| APPR-04 | 2 | Pending |
-| APPR-05 | 2 | Pending |
-| APPR-06 | 2 | Pending |
-| APPR-07 | 2 | Pending |
+| APPR-01 | 2 | Complete |
+| APPR-02 | 2 | Complete |
+| APPR-03 | 2 | Complete |
+| APPR-04 | 2 | Complete |
+| APPR-05 | 2 | Complete |
+| APPR-06 | 2 | Complete |
+| APPR-07 | 2 | Complete |
 | LMIT-01 | 3 | Pending |
 | LMIT-02 | 3 | Pending |
 | LMIT-03 | 3 | Pending |
