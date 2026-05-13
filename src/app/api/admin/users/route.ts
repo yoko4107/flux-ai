@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const roleFilter = searchParams.get("role")
   const orgFilter = searchParams.get("orgId")
+  const costCenterFilter = searchParams.get("costCenterId")
 
   const isSuperAdmin = session.user.role === "SUPER_ADMIN"
   const orgScope = !isSuperAdmin && session.user.organizationId
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
       ...orgScope,
       ...(roleFilter ? { role: roleFilter as never } : {}),
       ...(orgFilter ? { organizationId: orgFilter } : {}),
+      ...(costCenterFilter ? { costCenterId: costCenterFilter } : {}),
     },
     select: {
       id: true,

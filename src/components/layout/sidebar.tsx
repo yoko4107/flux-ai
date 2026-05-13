@@ -142,6 +142,12 @@ const navItems: NavItem[] = [
     icon: <Banknote className="h-4 w-4" />,
     roles: ["ADMIN"],
   },
+  {
+    title: "Cost Center Payroll",
+    href: "/admin/cost-centers/payroll",
+    icon: <Banknote className="h-4 w-4" />,
+    roles: ["ADMIN"],
+  },
 ]
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
