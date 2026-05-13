@@ -13,6 +13,7 @@ const VALID_KEYS = [
   "requireReceiptAbove",
   "notificationChannels",
   "resubmitBehavior",
+  "financeOfficer",
 ] as const
 
 const valueSchemas: Record<string, z.ZodTypeAny> = {
@@ -31,6 +32,7 @@ const valueSchemas: Record<string, z.ZodTypeAny> = {
     inApp: z.boolean(),
   }),
   resubmitBehavior: z.enum(["reset", "continue"] as const),
+  financeOfficer: z.object({ userId: z.string() }).nullable(),
 }
 
 // Resolve scope: SUPER_ADMIN may target any org or the global bucket (null);
