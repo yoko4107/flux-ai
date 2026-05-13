@@ -40,6 +40,17 @@ import { toast } from "sonner"
 const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "OTHER"]
 const TOP_CURRENCIES = CURRENCIES.slice(0, 50)
 
+function addBusinessDays(date: Date, days: number): Date {
+  const result = new Date(date)
+  let added = 0
+  while (added < days) {
+    result.setDate(result.getDate() + 1)
+    const day = result.getDay()
+    if (day !== 0 && day !== 6) { added++ }
+  }
+  return result
+}
+
 interface Approver {
   id: string
   name: string | null
@@ -131,6 +142,10 @@ export default function RequestDetailPage({
   const [uploadingReceipt, setUploadingReceipt] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Deadline config state
+  const [approvalDeadlineDays, setApprovalDeadlineDays] = useState<number | null>(null)
+  const [paymentDeadlineDays, setPaymentDeadlineDays] = useState<number | null>(null)
+
   const isDraft = request?.status === "DRAFT"
 
   useEffect(() => {
@@ -149,6 +164,17 @@ export default function RequestDetailPage({
       })
       .catch(() => setLoading(false))
   }, [id])
+
+  // Load deadline config from public endpoint
+  useEffect(() => {
+    fetch("/api/config/public")
+      .then((r) => r.json())
+      .then((data) => {
+        setApprovalDeadlineDays(data.approvalDeadline ?? null)
+        setPaymentDeadlineDays(data.paymentDeadline ?? null)
+      })
+      .catch(() => {})
+  }, [])
 
   // SSE for real-time status updates
   useEffect(() => {
@@ -756,6 +782,41 @@ export default function RequestDetailPage({
               <CardTitle className="text-base">Approval Timeline</CardTitle>
             </CardHeader>
             <CardContent>
+              {/* Deadline status banner */}
+              {request.status === "SUBMITTED" && approvalDeadlineDays != null && (() => {
+                const submittedDate = new Date(request.submittedAt ?? request.createdAt)
+                const deadlineDate = addBusinessDays(submittedDate, approvalDeadlineDays)
+                const now = new Date()
+                const isOverdue = deadlineDate <= now
+                const diffDays = Math.abs(Math.floor((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+                return (
+                  <div className={`flex items-center gap-2 text-sm mb-4 ${isOverdue ? "text-red-600" : "text-amber-600"}`}>
+                    {isOverdue
+                      ? <AlertTriangle className="h-4 w-4 shrink-0" />
+                      : <Clock className="h-4 w-4 shrink-0" />}
+                    {isOverdue
+                      ? `Approval overdue by ${diffDays} day${diffDays !== 1 ? "s" : ""}`
+                      : `Approval due by ${format(deadlineDate, "MMM d, yyyy")}`}
+                  </div>
+                )
+              })()}
+              {request.status === "APPROVED" && paymentDeadlineDays != null && (() => {
+                const approvedDate = new Date(request.updatedAt)
+                const payByDate = addBusinessDays(approvedDate, paymentDeadlineDays)
+                const now = new Date()
+                const isOverdue = payByDate <= now
+                const diffDays = Math.abs(Math.floor((payByDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+                return (
+                  <div className={`flex items-center gap-2 text-sm mb-4 ${isOverdue ? "text-red-600" : "text-amber-600"}`}>
+                    {isOverdue
+                      ? <AlertTriangle className="h-4 w-4 shrink-0" />
+                      : <Clock className="h-4 w-4 shrink-0" />}
+                    {isOverdue
+                      ? `Payment overdue by ${diffDays} day${diffDays !== 1 ? "s" : ""}`
+                      : `Payment due by ${format(payByDate, "MMM d, yyyy")}`}
+                  </div>
+                )
+              })()}
               {request.approvalSteps.length === 0 ? (
                 <p className="text-sm text-gray-500">
                   {request.status === "DRAFT"

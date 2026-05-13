@@ -45,7 +45,8 @@ export default async function AdminDashboard({
 
   const requestOrgWhere = { employee: { organizationId: adminOrgId } as never }
 
-  const [totalUsers, totalRequests, pendingRequests, byStatus, byCategory, pendingSteps, approvalDeadlineConfig] =
+  const [totalUsers, totalRequests, pendingRequests, byStatus, byCategory, pendingSteps,
+         approvalDeadlineConfig, paymentDeadlineConfig, approvedRequests] =
     await Promise.all([
       prisma.user.count({ where: userWhere }),
       prisma.reimbursementRequest.count({ where: requestOrgWhere }),
@@ -70,10 +71,24 @@ export default async function AdminDashboard({
         },
       }),
       getConfig(prisma, "approvalDeadline"),
+      getConfig(prisma, "paymentDeadline"),
+      prisma.reimbursementRequest.findMany({
+        where: { status: "APPROVED", employee: { organizationId: adminOrgId } as never },
+        select: {
+          id: true,
+          title: true,
+          amount: true,
+          currency: true,
+          updatedAt: true,
+          employee: { select: { name: true, email: true } },
+          costCenter: { select: { name: true } },
+        },
+      }),
     ])
 
-  const deadlineBusinessDays =
-    (approvalDeadlineConfig as { businessDays?: number } | null)?.businessDays ?? 3
+  // approvalDeadline is stored as a bare number (plan 03-01 decision)
+  const deadlineBusinessDays = typeof approvalDeadlineConfig === "number" ? approvalDeadlineConfig : 3
+  const paymentDeadlineDays = typeof paymentDeadlineConfig === "number" ? paymentDeadlineConfig : null
 
   const now = new Date()
 
@@ -82,6 +97,13 @@ export default async function AdminDashboard({
     const submittedAt = step.request.submittedAt ?? step.request.createdAt
     const deadline = addBusinessDays(submittedAt, deadlineBusinessDays)
     return deadline <= now
+  })
+
+  // Find overdue payments (APPROVED requests past paymentDeadline business days from updatedAt)
+  type ApprovedReq = (typeof approvedRequests)[number]
+  const overduePayments: ApprovedReq[] = paymentDeadlineDays == null ? [] : approvedRequests.filter((req: ApprovedReq) => {
+    const payByDate = addBusinessDays(req.updatedAt, paymentDeadlineDays)
+    return payByDate <= now
   })
 
   // Find max count for CSS bars
@@ -149,6 +171,17 @@ export default async function AdminDashboard({
           <CardContent>
             <div className="text-2xl font-bold">{overdueSteps.length}</div>
             <p className="text-sm text-gray-500">Overdue Approvals</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="inline-flex p-2 rounded-lg bg-amber-100 w-fit">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{overduePayments.length}</div>
+            <p className="text-sm text-gray-500">Overdue Payments</p>
           </CardContent>
         </Card>
       </div>
@@ -240,6 +273,53 @@ export default async function AdminDashboard({
               {overdueSteps.length > 10 && (
                 <p className="text-sm text-gray-500 mt-2">
                   ...and {overdueSteps.length - 10} more
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Overdue payments list */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Overdue Payments</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {paymentDeadlineDays == null ? (
+            <p className="text-gray-500 text-sm">Configure a payment deadline to track overdue payments.</p>
+          ) : overduePayments.length === 0 ? (
+            <p className="text-gray-500 text-sm">No overdue payments. All approved requests are within the payment deadline.</p>
+          ) : (
+            <div className="space-y-2">
+              {overduePayments.slice(0, 10).map((req) => {
+                const payByDate = addBusinessDays(req.updatedAt, paymentDeadlineDays)
+                const daysOverdue = Math.floor((now.getTime() - payByDate.getTime()) / (1000 * 60 * 60 * 24))
+
+                return (
+                  <div
+                    key={req.id}
+                    className="flex items-center justify-between p-3 rounded-md border border-amber-200 bg-amber-50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium text-sm">{req.title}</span>
+                      <p className="text-xs text-gray-500">
+                        {req.employee.name ?? req.employee.email ?? "Unknown"}
+                        {req.costCenter ? ` · ${req.costCenter.name}` : ""} — {daysOverdue} day{daysOverdue !== 1 ? "s" : ""} overdue
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0 ml-4">
+                      <span className="text-xs font-medium text-amber-700">
+                        {Number(req.amount).toLocaleString()} {req.currency}
+                      </span>
+                      <p className="text-xs text-gray-400">Due: {payByDate.toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                )
+              })}
+              {overduePayments.length > 10 && (
+                <p className="text-sm text-gray-500 mt-2">
+                  ...and {overduePayments.length - 10} more
                 </p>
               )}
             </div>
