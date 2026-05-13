@@ -28,11 +28,14 @@
 - [ ] **Phase 1: Cost Center Config Scoping** — Add CC selector to config page; wire all settings to per-CC
 - [ ] **Phase 2: Per-CC Approval Workflow** — Scope existing approval committee per cost center
 - [ ] **Phase 3: Per-CC Policies & Deadlines** — Scope spending limits and deadlines per CC
-- [ ] **Phase 4: Custom Expense Categories** — Replace hardcoded enum with DB-backed categories per CC
-- [ ] **Phase 5: Per-CC Role Management** — Roles scoped per CC (not global)
-- [ ] **Phase 6: Currency & FX Rate Config** — FX rate override UI (API exists, no admin UI)
-- [ ] **Phase 7: Regional Rules in Config Context** — Surface per-diem & regional rules within CC config
-- [ ] **Phase 8: Config Management & Enforcement** — Validation, escalation config, end-to-end enforcement
+- [ ] **Phase 4: Custom Expense Categories** — Free-text custom categories added to AdminConfig JSON
+- [ ] **Phase 5: Validation & Polish** — Unsaved-changes warning, validation, preview, enforcement check
+
+**Cut (deferred to v2):**
+- ~~Phase 5: Per-CC Role Management~~ — Global roles sufficient for v1; CostCenterRole table deferred
+- ~~Phase 6: Currency & FX Rate Config~~ — CC currency already set; live rates sufficient for v1
+- ~~Phase 7: Regional Rules inline~~ — Per-diem page exists; link-out sufficient for v1
+- ~~Phase 8 escalation config~~ — Merged into Phase 5 as validation only; escalation timeout hardcoded
 
 ---
 
@@ -237,10 +240,7 @@
 | 2. Per-CC Approval Workflow | 0/1 | Not started | — |
 | 3. Per-CC Policies & Deadlines | 0/1 | Not started | — |
 | 4. Custom Expense Categories | 0/1 | Not started | — |
-| 5. Per-CC Role Management | 0/1 | Not started | — |
-| 6. Currency & FX Rate Config | 0/1 | Not started | — |
-| 7. Regional Rules in Config | 0/1 | Not started | — |
-| 8. Config Management & Enforcement | 0/1 | Not started | — |
+| 5. Validation & Polish | 0/1 | Not started | — |
 
 ---
 
@@ -249,15 +249,12 @@
 | Phase | Count | Requirements |
 |-------|-------|--------------|
 | 1. Cost Center Config Scoping | 4 | NAV-01, NAV-02, NAV-03, NAV-04 |
-| 2. Per-CC Approval Workflow | 7 | APPR-01, APPR-02, APPR-03, APPR-04, APPR-05, APPR-06, APPR-07 |
+| 2. Per-CC Approval Workflow | 7 | APPR-01–07 |
 | 3. Per-CC Policies & Deadlines | 10 | LMIT-01–05, DEAD-01–05 |
-| 4. Custom Expense Categories | 6 | CATG-01, CATG-02, CATG-03, CATG-04, CATG-05, CATG-06 |
-| 5. Per-CC Role Management | 6 | ROLE-01, ROLE-02, ROLE-03, ROLE-04, ROLE-05, ROLE-06 |
-| 6. Currency & FX Rate Config | 4 | CURR-01, CURR-02, CURR-03, CURR-04 |
-| 7. Regional Rules in Config | 5 | REGN-01, REGN-02, REGN-03, REGN-04, REGN-05 |
-| 8. Config Management & Enforcement | 11 | CONF-01–05, ENFC-01–06 |
+| 4. Custom Expense Categories | 3 | CATG-01, CATG-02, CATG-03 |
+| 5. Validation & Polish | 5 | CONF-01, CONF-02, CONF-04, CONF-05, ENFC-01 |
 
-**Total: 46/46 requirements mapped (100%)**
+**v1 active: 29 requirements | Deferred to v2: CATG-04–06, ROLE-01–06, CURR-01–04, REGN-01–05, CONF-03, ENFC-02–06**
 
 ---
 
