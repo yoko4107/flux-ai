@@ -573,8 +573,8 @@ export default function AdminConfigPage() {
   async function handleSaveLimits() {
     setSavingLimits(true)
     const [ok1, ok2] = await Promise.all([
-      saveConfig("maxAmountPerRequest", maxAmountPerRequest),
-      saveConfig("approvalThreshold", approvalThreshold),
+      saveConfig("maxAmountPerRequest", maxAmountPerRequest, selectedCC?.id ?? null),
+      saveConfig("approvalThreshold", approvalThreshold, selectedCC?.id ?? null),
     ])
     if (ok1 && ok2) toast.success("Spending limits saved")
     else toast.error("Failed to save spending limits")
