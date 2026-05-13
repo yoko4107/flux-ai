@@ -3,7 +3,6 @@ import type { PrismaClient } from "@/generated/prisma"
 type AdminConfigRow = {
   key: string
   value: unknown
-  [key: string]: unknown
 }
 
 /**
