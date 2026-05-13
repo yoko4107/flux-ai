@@ -348,6 +348,7 @@ export default function AdminConfigPage() {
   // Deadlines
   const [submissionDeadline, setSubmissionDeadline] = useState(25)
   const [approvalDeadline, setApprovalDeadline] = useState(5)
+  const [paymentDeadline, setPaymentDeadline] = useState(5)
   const [savingDeadlines, setSavingDeadlines] = useState(false)
 
   // Max amounts per category
@@ -443,6 +444,9 @@ export default function AdminConfigPage() {
         }
         if (typeof c.approvalDeadline === "number") {
           setApprovalDeadline(c.approvalDeadline)
+        }
+        if (typeof c.paymentDeadline === "number") {
+          setPaymentDeadline(c.paymentDeadline)
         }
         if (c.maxAmountPerCategory) {
           setMaxAmounts(c.maxAmountPerCategory as Record<string, number>)
@@ -545,11 +549,12 @@ export default function AdminConfigPage() {
 
   async function handleSaveDeadlines() {
     setSavingDeadlines(true)
-    const [ok1, ok2] = await Promise.all([
+    const [ok1, ok2, ok3] = await Promise.all([
       saveConfig("submissionDeadline", submissionDeadline, selectedCC?.id ?? null),
       saveConfig("approvalDeadline", approvalDeadline, selectedCC?.id ?? null),
+      saveConfig("paymentDeadline", paymentDeadline, selectedCC?.id ?? null),
     ])
-    if (ok1 && ok2) toast.success("Deadlines saved")
+    if (ok1 && ok2 && ok3) toast.success("Deadlines saved")
     else toast.error("Failed to save deadlines")
     setSavingDeadlines(false)
   }
@@ -814,6 +819,19 @@ export default function AdminConfigPage() {
               onChange={(e) => setApprovalDeadline(Number(e.target.value))}
               className="w-full"
             />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="paymentDeadline">Payment Deadline (business days)</Label>
+            <Input
+              id="paymentDeadline"
+              type="number"
+              min={1}
+              step={1}
+              value={paymentDeadline}
+              onChange={(e) => setPaymentDeadline(Number(e.target.value))}
+              className="w-full"
+            />
+            <p className="text-xs text-gray-500">Business days after approval for Finance Officer to pay</p>
           </div>
         </div>
       </SectionCard>
