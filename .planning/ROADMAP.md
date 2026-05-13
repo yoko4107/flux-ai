@@ -118,8 +118,8 @@ Plans:
 
 **Plans:** 2 plans
 Plans:
-- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
-- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
+- [ ] 03-01-limit-enforcement-PLAN.md — Wave 0 test stubs + validateSubmission helper + fix CC-scoped config in POST /api/requests + new VALID_KEYS (maxAmountPerRequest, approvalThreshold) + admin UI fields
+- [ ] 03-02-deadline-ui-PLAN.md — paymentDeadline admin UI field + public config CC scope fix + employee request deadline status + overdue payments admin dashboard section
 
 ---
 
