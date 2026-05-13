@@ -62,7 +62,7 @@
 
 **Plans:** 2 plans
 Plans:
-- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [x] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
 - [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
@@ -260,7 +260,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Cost Center Config Scoping | 0/2 | Not started | — |
+| 1. Cost Center Config Scoping | 1/2 | In Progress | — |
 | 2. Per-CC Approval Workflow | 0/1 | Not started | — |
 | 3. Per-CC Policies & Deadlines | 0/1 | Not started | — |
 | 4. Custom Expense Categories | 0/1 | Not started | — |

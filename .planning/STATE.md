@@ -2,7 +2,7 @@
 
 **Project:** Cost Center Admin Panel (System Configuration)  
 **Current Date:** 2026-05-13  
-**Status:** Roadmap Created — Ready for Phase 1 Planning
+**Status:** Phase 1 In Progress — Plan 01 Complete
 
 ---
 
@@ -20,13 +20,13 @@ Admins can configure all reimbursement rules per cost center without technical s
 
 ## Current Position
 
-**Phase:** Roadmap finalized (pre-Phase 1)  
+**Phase:** Phase 1 — Cost Center Config Scoping (Plan 01/02 complete)  
 **Milestone:** System Configuration v1  
-**Progress:** 0/46 requirements implemented
+**Progress:** 2/46 requirements implemented (NAV-01, NAV-02)
 
 ```
 Roadmap: ████████████████████████ 100% (structure complete)
-Implementation: • · · · · · · (Phase 1 starts next)
+Phase 1:  ████████████· · · · · · 50% (1/2 plans done)
 ```
 
 ---
@@ -35,7 +35,7 @@ Implementation: • · · · · · · (Phase 1 starts next)
 
 | Phase | Name | Requirements | Status | Est. Plans |
 |-------|------|--------------|--------|-----------|
-| 1 | Foundation | 4 | Not started | 1 |
+| 1 | Foundation | 4 | In Progress (1/2 plans) | 2 |
 | 2 | Approval Workflows | 7 | Not started | 1 |
 | 3 | Spending Policies | 5 | Not started | 1 |
 | 4 | Expense Categories | 6 | Not started | 1 |
@@ -56,6 +56,9 @@ Implementation: • · · · · · · (Phase 1 starts next)
 | No approval delegation (v2) | Locked | ✓ Reduces complexity |
 | No real-time notifications (v2) | Locked | ✓ Email triggers sufficient |
 | No audit logging beyond git (v2) | Locked | ✓ Standard commits adequate |
+| Map-based merge in mergeConfigs (orgRows first, ccRows overwrite) | Locked | ✓ O(n+m), last-write-wins |
+| null costCenterId always valid (sentinel {id:''}) | Locked | ✓ No DB query for org-wide paths |
+| (ccId ?? null) as unknown as string for Prisma compound key | Locked | ✓ Required by Prisma null cast |
 
 ---
 
@@ -97,16 +100,16 @@ Implementation: • · · · · · · (Phase 1 starts next)
 
 ## Next Steps
 
-1. Review and approve ROADMAP.md
-2. Proceed to `/gsd:plan-phase 1` to decompose Phase 1 into executable plans
-3. Execute Phase 1 plans (cost center navigation UI, selection state)
+1. Execute Plan 02: UI CC Selector — Add cost center dropdown to /admin/config, wire re-fetch and saves to selected CC
+2. After Phase 1 complete: proceed to Phase 2 (Per-CC Approval Workflow)
 
 ---
 
 ## Session Continuity
 
-**Last Updated:** 2026-05-13 (roadmap creation)  
-**Last Editor:** Claude (roadmapper)  
+**Last Updated:** 2026-05-13 (Plan 01 execution)  
+**Last Editor:** Claude (executor)  
+**Stopped At:** Completed 01-cost-center-config-scoping 01-api-extension-PLAN.md  
 **Branch:** claude/dreamy-jones-22d72f  
 **Mode:** yolo (with plan_check, verifier, nyquist_validation workflows enabled)
 
