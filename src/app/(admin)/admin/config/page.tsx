@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { ChevronUp, ChevronDown, X, UserPlus, ShieldCheck, Banknote, Building2 } from "lucide-react"
 import { CostCenterSelector, type CostCenter } from "@/components/admin/CostCenterSelector"
+import { derivePreviewSteps } from "@/lib/workflow-preview-helpers"
 
 // Types
 interface UserOption {
@@ -80,6 +81,248 @@ function SectionCard({
   )
 }
 
+function WorkflowPreviewCard({
+  selectedCC,
+  committee,
+  users,
+  financeOfficerId,
+}: {
+  selectedCC: CostCenter | null
+  committee: ApprovalCommittee
+  users: UserOption[]
+  financeOfficerId: string | null
+}) {
+  const fo = users.find((u) => u.id === financeOfficerId)
+  const steps = derivePreviewSteps(committee)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Approval Flow Preview</CardTitle>
+        <p className="text-xs text-gray-500">
+          How requests from{" "}
+          <span className="font-semibold">{selectedCC?.name ?? "this cost center"}</span> will be
+          routed
+        </p>
+      </CardHeader>
+      <CardContent>
+        {steps.length === 0 ? (
+          <p className="text-sm text-amber-600">
+            No approvers configured — requests will not route.
+          </p>
+        ) : (
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium">
+                Employee
+              </span>
+              <span className="text-gray-400">→</span>
+              {committee.mode === "sequential" ? (
+                steps.map((step, idx) => {
+                  const u = users.find((u) => u.id === step.id)
+                  return (
+                    <>
+                      <span
+                        key={step.id}
+                        className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
+                      >
+                        {u?.name ?? u?.email ?? "Unknown"} (Step {idx + 1})
+                      </span>
+                      {idx < steps.length - 1 && (
+                        <span className="text-gray-400">→</span>
+                      )}
+                    </>
+                  )
+                })
+              ) : (
+                <div className="flex gap-2 flex-wrap items-center">
+                  {steps.map((step) => {
+                    const u = users.find((u) => u.id === step.id)
+                    return (
+                      <span
+                        key={step.id}
+                        className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-800"
+                      >
+                        {u?.name ?? u?.email ?? "Unknown"} (parallel)
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+              <span className="text-gray-400">→</span>
+              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">
+                {fo ? (fo.name ?? fo.email) : "Finance Officer (not set)"}
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Mode:{" "}
+              {committee.mode === "sequential"
+                ? "Sequential — each approver acts in order"
+                : "Parallel — all approvers notified simultaneously; all must approve"}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function RoleAssignmentsCard({
+  users,
+  onChanged,
+}: {
+  users: UserOption[]
+  onChanged: () => void
+}) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [addApprover, setAddApprover] = useState("")
+  const [addFinance, setAddFinance] = useState("")
+
+  const approvers = users.filter((u) => u.role === "APPROVER")
+  const financeUsers = users.filter((u) => u.role === "FINANCE")
+  const employees = users.filter((u) => u.role === "EMPLOYEE")
+
+  async function changeRole(userId: string, role: string) {
+    setBusy(userId)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      })
+      if (res.ok) {
+        toast.success("Role updated")
+        onChanged()
+      } else {
+        const err = await res.json().catch(() => null)
+        toast.error(err?.error ?? "Failed to update role")
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Role Assignments</CardTitle>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Assign which employees act as approvers or finance officers. All other role management is
+          handled within{" "}
+          <a href="/admin/cost-centers" className="underline text-blue-600">Cost Centers</a>.
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-6 md:grid-cols-2">
+        {/* Approvers */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-semibold text-gray-800">Approvers</span>
+          </div>
+          {approvers.length === 0 ? (
+            <p className="text-xs text-gray-400">No approvers assigned.</p>
+          ) : (
+            <ul className="space-y-1">
+              {approvers.map((u) => (
+                <li key={u.id} className="flex items-center justify-between rounded-md bg-blue-50 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
+                    <p className="text-[11px] text-gray-500">{u.email}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                    disabled={busy === u.id}
+                    onClick={() => changeRole(u.id, "EMPLOYEE")}
+                    title="Remove approver role"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <select
+              value={addApprover}
+              onChange={(e) => setAddApprover(e.target.value)}
+              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+            >
+              <option value="">Promote employee to approver…</option>
+              {employees.map((u) => (
+                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={!addApprover || !!busy}
+              onClick={() => { changeRole(addApprover, "APPROVER"); setAddApprover("") }}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Finance Officers */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Banknote className="h-4 w-4 text-green-600" />
+            <span className="text-sm font-semibold text-gray-800">Finance Officers</span>
+          </div>
+          {financeUsers.length === 0 ? (
+            <p className="text-xs text-gray-400">No finance officers assigned.</p>
+          ) : (
+            <ul className="space-y-1">
+              {financeUsers.map((u) => (
+                <li key={u.id} className="flex items-center justify-between rounded-md bg-green-50 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
+                    <p className="text-[11px] text-gray-500">{u.email}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                    disabled={busy === u.id}
+                    onClick={() => changeRole(u.id, "EMPLOYEE")}
+                    title="Remove finance role"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <select
+              value={addFinance}
+              onChange={(e) => setAddFinance(e.target.value)}
+              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+            >
+              <option value="">Promote employee to finance…</option>
+              {employees.map((u) => (
+                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={!addFinance || !!busy}
+              onClick={() => { changeRole(addFinance, "FINANCE"); setAddFinance("") }}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function AdminConfigPage() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<UserOption[]>([])
@@ -97,6 +340,10 @@ export default function AdminConfigPage() {
   })
   const [committeeAddId, setCommitteeAddId] = useState("")
   const [savingCommittee, setSavingCommittee] = useState(false)
+
+  // Finance Officer
+  const [financeOfficerId, setFinanceOfficerId] = useState<string | null>(null)
+  const [savingFO, setSavingFO] = useState(false)
 
   // Deadlines
   const [submissionDeadline, setSubmissionDeadline] = useState(25)
@@ -175,7 +422,17 @@ export default function AdminConfigPage() {
             mode: (raw.mode as "sequential" | "parallel") ?? "sequential",
             approvers,
           })
+        } else {
+          setCommittee({ mode: "sequential", approvers: [] })
         }
+
+        if (c.financeOfficer) {
+          const fo = c.financeOfficer as { userId?: string }
+          setFinanceOfficerId(fo.userId ?? null)
+        } else {
+          setFinanceOfficerId(null)
+        }
+
         if (typeof c.submissionDeadline === "number") {
           setSubmissionDeadline(c.submissionDeadline)
         }
@@ -270,6 +527,15 @@ export default function AdminConfigPage() {
     setSavingCommittee(false)
   }
 
+  async function handleSaveFO() {
+    setSavingFO(true)
+    const value = financeOfficerId ? { userId: financeOfficerId } : null
+    const ok = await saveConfig("financeOfficer", value, selectedCC?.id ?? null)
+    if (ok) toast.success("Finance Officer saved")
+    else toast.error("Failed to save Finance Officer")
+    setSavingFO(false)
+  }
+
   async function handleSaveDeadlines() {
     setSavingDeadlines(true)
     const [ok1, ok2] = await Promise.all([
@@ -326,6 +592,8 @@ export default function AdminConfigPage() {
   }
 
   const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "ACCOMMODATION", "COMMUNICATION", "TRAINING", "ENTERTAINMENT", "MEETING", "EQUIPMENT", "PRINTING", "SOFTWARE", "OTHER"] as const
+
+  const financeUsers = users.filter((u) => u.role === "FINANCE")
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -453,10 +721,51 @@ export default function AdminConfigPage() {
         </div>
       </SectionCard>
 
-      {/* 2. Role Assignments */}
-      <RoleAssignmentsCard users={users} onChanged={() => loadData(selectedCC?.id ?? null)} />
+      {/* Finance Officer for This Cost Center */}
+      <SectionCard
+        title="Finance Officer for This Cost Center"
+        metaKey="financeOfficer"
+        meta={meta}
+        onSave={handleSaveFO}
+        saving={savingFO}
+      >
+        <p className="text-sm text-gray-600">
+          This officer handles payment for approved requests in{" "}
+          <span className="font-medium">{selectedCC?.name ?? "this cost center"}</span>.
+        </p>
+        {financeUsers.length === 0 ? (
+          <p className="text-sm text-amber-600">
+            No Finance Officers available. Promote an employee below.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            <Label htmlFor="financeOfficer">Finance Officer</Label>
+            <select
+              id="financeOfficer"
+              value={financeOfficerId ?? ""}
+              onChange={(e) => setFinanceOfficerId(e.target.value || null)}
+              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">None assigned</option>
+              {financeUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name ?? u.email}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </SectionCard>
 
-      {/* 3. Deadlines */}
+      {/* Workflow Preview Card */}
+      <WorkflowPreviewCard
+        selectedCC={selectedCC}
+        committee={committee}
+        users={users}
+        financeOfficerId={financeOfficerId}
+      />
+
+      {/* 2. Deadlines */}
       <SectionCard
         title="Deadlines"
         metaKey="submissionDeadline"
@@ -638,156 +947,12 @@ export default function AdminConfigPage() {
           </label>
         </div>
       </SectionCard>
+
+      {/* 8. Role Assignments (org-wide) */}
+      <p className="text-xs text-gray-500 mb-2">
+        Role promotions apply org-wide — not scoped to the selected cost center.
+      </p>
+      <RoleAssignmentsCard users={users} onChanged={() => loadData(selectedCC?.id ?? null)} />
     </div>
-  )
-}
-
-function RoleAssignmentsCard({ users, onChanged }: { users: UserOption[]; onChanged: () => void }) {
-  const [busy, setBusy] = useState<string | null>(null)
-  const [addApprover, setAddApprover] = useState("")
-  const [addFinance, setAddFinance] = useState("")
-
-  const approvers = users.filter((u) => u.role === "APPROVER")
-  const financeUsers = users.filter((u) => u.role === "FINANCE")
-  const employees = users.filter((u) => u.role === "EMPLOYEE")
-
-  async function changeRole(userId: string, role: string) {
-    setBusy(userId)
-    try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
-      })
-      if (res.ok) {
-        toast.success("Role updated")
-        onChanged()
-      } else {
-        const err = await res.json().catch(() => null)
-        toast.error(err?.error ?? "Failed to update role")
-      }
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Role Assignments</CardTitle>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Assign which employees act as approvers or finance officers. All other role management is
-          handled within{" "}
-          <a href="/admin/cost-centers" className="underline text-blue-600">Cost Centers</a>.
-        </p>
-      </CardHeader>
-      <CardContent className="grid gap-6 md:grid-cols-2">
-        {/* Approvers */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-blue-600" />
-            <span className="text-sm font-semibold text-gray-800">Approvers</span>
-          </div>
-          {approvers.length === 0 ? (
-            <p className="text-xs text-gray-400">No approvers assigned.</p>
-          ) : (
-            <ul className="space-y-1">
-              {approvers.map((u) => (
-                <li key={u.id} className="flex items-center justify-between rounded-md bg-blue-50 px-3 py-2">
-                  <div>
-                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
-                    <p className="text-[11px] text-gray-500">{u.email}</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                    disabled={busy === u.id}
-                    onClick={() => changeRole(u.id, "EMPLOYEE")}
-                    title="Remove approver role"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-2">
-            <select
-              value={addApprover}
-              onChange={(e) => setAddApprover(e.target.value)}
-              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
-            >
-              <option value="">Promote employee to approver…</option>
-              {employees.map((u) => (
-                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              disabled={!addApprover || !!busy}
-              onClick={() => { changeRole(addApprover, "APPROVER"); setAddApprover("") }}
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Finance Officers */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Banknote className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-semibold text-gray-800">Finance Officers</span>
-          </div>
-          {financeUsers.length === 0 ? (
-            <p className="text-xs text-gray-400">No finance officers assigned.</p>
-          ) : (
-            <ul className="space-y-1">
-              {financeUsers.map((u) => (
-                <li key={u.id} className="flex items-center justify-between rounded-md bg-green-50 px-3 py-2">
-                  <div>
-                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
-                    <p className="text-[11px] text-gray-500">{u.email}</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                    disabled={busy === u.id}
-                    onClick={() => changeRole(u.id, "EMPLOYEE")}
-                    title="Remove finance role"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-2">
-            <select
-              value={addFinance}
-              onChange={(e) => setAddFinance(e.target.value)}
-              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
-            >
-              <option value="">Promote employee to finance…</option>
-              {employees.map((u) => (
-                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              disabled={!addFinance || !!busy}
-              onClick={() => { changeRole(addFinance, "FINANCE"); setAddFinance("") }}
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   )
 }

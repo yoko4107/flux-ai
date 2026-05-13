@@ -14,6 +14,7 @@ const VALID_KEYS = [
   "requireReceiptAbove",
   "notificationChannels",
   "resubmitBehavior",
+  "financeOfficer",
 ] as const
 
 const valueSchemas: Record<string, z.ZodTypeAny> = {
@@ -32,6 +33,7 @@ const valueSchemas: Record<string, z.ZodTypeAny> = {
     inApp: z.boolean(),
   }),
   resubmitBehavior: z.enum(["reset", "continue"] as const),
+  financeOfficer: z.object({ userId: z.string() }).nullable(),
 }
 
 // Resolve scope: SUPER_ADMIN may target any org or the global bucket (null);
@@ -64,13 +66,13 @@ export async function GET(request: Request) {
 
   const costCenterId = searchParams.get("costCenterId") || null
 
-  // 2. Org-wide rows (always fetched as fallback)
+  // Org-wide rows (always fetched as fallback)
   const orgConfigs = await prisma.adminConfig.findMany({
     where: { organizationId: scope.orgId, costCenterId: null },
     include: { updatedBy: { select: { id: true, name: true } } },
   })
 
-  // 1. CC-specific rows (empty array if no costCenterId)
+  // CC-specific rows (empty array if no costCenterId)
   const ccConfigs: typeof orgConfigs = costCenterId
     ? await prisma.adminConfig.findMany({
         where: { organizationId: scope.orgId, costCenterId },
@@ -78,7 +80,7 @@ export async function GET(request: Request) {
       })
     : []
 
-  // 3. Merge: CC-specific takes precedence
+  // Merge: CC-specific takes precedence
   const configs = mergeConfigs(ccConfigs, orgConfigs) as typeof orgConfigs
 
   const result: Record<string, unknown> = {}
