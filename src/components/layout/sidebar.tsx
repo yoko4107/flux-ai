@@ -16,7 +16,6 @@ import {
   Settings,
   BarChart3,
   FileCheck,
-  Mail,
   Palette,
   CalendarDays,
   Wallet,
@@ -111,12 +110,6 @@ const navItems: NavItem[] = [
     title: "User Cost Center",
     href: "/admin/cost-centers",
     icon: <MapPin className="h-4 w-4" />,
-    roles: ["ADMIN"],
-  },
-  {
-    title: "Invitations",
-    href: "/admin/invitations",
-    icon: <Mail className="h-4 w-4" />,
     roles: ["ADMIN"],
   },
   {
