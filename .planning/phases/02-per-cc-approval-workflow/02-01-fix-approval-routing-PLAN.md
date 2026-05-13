@@ -8,7 +8,9 @@ files_modified:
   - src/lib/__tests__/approval-routing.test.ts
   - src/app/api/requests/route.ts
 autonomous: true
-requirements: [APPR-01, APPR-02, APPR-03, APPR-04, ENFC-01]
+requirements: [APPR-02, APPR-03, APPR-04, ENFC-01]
+# APPR-01 pre-satisfied in Phase 1 — mode selection UI already per-CC via costCenterId scoping.
+# No new implementation needed for APPR-01 in this phase.
 
 must_haves:
   truths:
@@ -109,7 +111,7 @@ export async function filterCommitteeForRequester(userId: string, members: Commi
   <name>Task 1: Write failing tests for CC-scoped approval routing</name>
   <files>src/lib/__tests__/approval-routing.test.ts</files>
   <behavior>
-    - Test 1 (APPR-01/ENFC-01): getConfig called with CC ID returns CC-specific committee over org-wide — mock Prisma to return different committees for CC vs org, assert CC committee is used
+    - Test 1 (ENFC-01): getConfig called with CC ID returns CC-specific committee over org-wide — mock Prisma to return different committees for CC vs org, assert CC committee is used
     - Test 2 (APPR-02/APPR-03): flat approvers[] → ApprovalStep[] conversion maps userId at index 0→order 0, index 1→order 1
     - Test 3 (APPR-04): empty approvers[] → zero ApprovalStep rows created
     - Test 4 (ENFC-01): no CC committee → falls back to org-wide committee (mock: CC findFirst returns null, org findFirst returns org committee)
