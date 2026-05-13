@@ -26,8 +26,8 @@
 ## Phases
 
 - [x] **Phase 1: Cost Center Config Scoping** — Add CC selector to config page; wire all settings to per-CC (completed 2026-05-13)
-- [~] **Phase 2: Per-CC Approval Workflow** — Fix approval routing bugs (plan 01 done); finance officer + preview TBD (plan 02)
-- [ ] **Phase 3: Per-CC Policies & Deadlines** — Scope spending limits and deadlines per CC
+- [x] **Phase 2: Per-CC Approval Workflow** — Fix approval routing bugs (plan 01 done); finance officer + preview TBD (plan 02)
+- [~] **Phase 3: Per-CC Policies & Deadlines** — Limit enforcement done (plan 01); deadline UI TBD (plan 02)
 - [ ] **Phase 4: Custom Expense Categories** — Free-text custom categories added to AdminConfig JSON
 - [ ] **Phase 5: Validation & Polish** — Unsaved-changes warning, validation, preview, enforcement check
 
@@ -118,7 +118,7 @@ Plans:
 
 **Plans:** 2 plans
 Plans:
-- [ ] 03-01-limit-enforcement-PLAN.md — Wave 0 test stubs + validateSubmission helper + fix CC-scoped config in POST /api/requests + new VALID_KEYS (maxAmountPerRequest, approvalThreshold) + admin UI fields
+- [x] 03-01-limit-enforcement-PLAN.md — Wave 0 test stubs + validateSubmission helper + fix CC-scoped config in POST /api/requests + new VALID_KEYS (maxAmountPerRequest, approvalThreshold) + admin UI fields
 - [ ] 03-02-deadline-ui-PLAN.md — paymentDeadline admin UI field + public config CC scope fix + employee request deadline status + overdue payments admin dashboard section
 
 ---
@@ -264,7 +264,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Cost Center Config Scoping | 2/2 | Complete    | 2026-05-13 |
 | 2. Per-CC Approval Workflow | 2/2 | Complete   | 2026-05-13 |
-| 3. Per-CC Policies & Deadlines | 0/1 | Not started | — |
+| 3. Per-CC Policies & Deadlines | 1/2 | In progress | — |
 | 4. Custom Expense Categories | 0/1 | Not started | — |
 | 5. Validation & Polish | 0/1 | Not started | — |
 

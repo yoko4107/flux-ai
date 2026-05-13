@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 02-per-cc-approval-workflow 02-02-finance-officer-preview-PLAN.md
-last_updated: "2026-05-13T07:16:34.671Z"
+stopped_at: Completed 03-per-cc-policies-deadlines 03-01-limit-enforcement-PLAN.md
+last_updated: "2026-05-13T17:14:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -35,7 +35,7 @@ Admins can configure all reimbursement rules per cost center without technical s
 
 ## Current Position
 
-**Phase:** Phase 2 — Per-CC Approval Workflow (2/2 plans complete)  
+**Phase:** Phase 3 — Per-CC Policies & Deadlines (1/1 plans complete)  
 **Milestone:** System Configuration v1  
 **Progress:** [██████████] 100%
 
@@ -43,6 +43,7 @@ Admins can configure all reimbursement rules per cost center without technical s
 Roadmap: ████████████████████████ 100% (structure complete)
 Phase 1:  ████████████████████████ 100% (2/2 plans done)
 Phase 2:  ████████████████████████ 100% (2/2 plans done)
+Phase 3:  ████████████████████████ 100% (1/1 plans done)
 ```
 
 ---
@@ -53,7 +54,7 @@ Phase 2:  ███████████████████████�
 |-------|------|--------------|--------|-----------|
 | 1 | Foundation | 4 | Complete (2/2 plans) | 2 |
 | 2 | Approval Workflows | 7 | Complete (2/2 plans) | 2 |
-| 3 | Spending Policies | 5 | Not started | 1 |
+| 3 | Spending Policies | 5 | Complete (1/1 plans) | 1 |
 | 4 | Expense Categories | 6 | Not started | 1 |
 | 5 | Role Management | 6 | Not started | 1 |
 | 6 | Regional Rules | 5 | Not started | 1 |
@@ -83,6 +84,10 @@ Phase 2:  ███████████████████████�
 | derivePreviewSteps extracted as pure helper in workflow-preview-helpers.ts | Locked | ✓ Testable without React renderer |
 | Config API GET/PUT extended with costCenterId param | Locked | ✓ Required for CC-scoped financeOfficer storage |
 | financeOfficer key in AdminConfig VALID_KEYS + Zod schema | Locked | ✓ Accepts per-CC finance officer designation |
+| Auto-approve skips approval steps entirely — returns 201 APPROVED | Locked | ✓ Finance Officer payment flow is separate |
+| approvalThreshold=0 disables auto-approve (explicit opt-in) | Locked | ✓ Zero-value default is safe |
+| submissionDeadline stored as bare number (not {day: number}) | Locked | ✓ Fixes shape bug across all callers |
+| validateSubmission returns string[] details array | Locked | ✓ LMIT-05: UI can show multiple errors |
 
 ---
 
@@ -124,16 +129,16 @@ Phase 2:  ███████████████████████�
 
 ## Next Steps
 
-1. Phase 2 complete (APPR-01 through APPR-07 all satisfied) — proceed to Phase 3: Spending Policies
-2. Phase 3 will add per-CC spending limits and policy enforcement at submission time
+1. Phase 3 complete (LMIT-01 through LMIT-05 all satisfied) — proceed to Phase 4: Expense Categories
+2. Phase 4 will add per-CC allowed category management and category-specific rules
 
 ---
 
 ## Session Continuity
 
-**Last Updated:** 2026-05-13 (Plan 02 execution)  
+**Last Updated:** 2026-05-13 (Plan 03-01 execution)  
 **Last Editor:** Claude (executor)  
-**Stopped At:** Completed 02-per-cc-approval-workflow 02-02-finance-officer-preview-PLAN.md
+**Stopped At:** Completed 03-per-cc-policies-deadlines 03-01-limit-enforcement-PLAN.md
 **Branch:** claude/dreamy-jones-22d72f  
 **Mode:** yolo (with plan_check, verifier, nyquist_validation workflows enabled)
 

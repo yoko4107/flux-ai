@@ -24,11 +24,11 @@
 
 ### Spending Limits & Thresholds
 
-- [ ] **LMIT-01**: Admin can set overall reimbursement limit per request
-- [ ] **LMIT-02**: Admin can set approval threshold (small requests auto-approve)
-- [ ] **LMIT-03**: Admin can set per-category spending limits
-- [ ] **LMIT-04**: Reimbursement system enforces limits when employee submits
-- [ ] **LMIT-05**: System prevents submission over limit or flags for review
+- [x] **LMIT-01**: Admin can set overall reimbursement limit per request
+- [x] **LMIT-02**: Admin can set approval threshold (small requests auto-approve)
+- [x] **LMIT-03**: Admin can set per-category spending limits
+- [x] **LMIT-04**: Reimbursement system enforces limits when employee submits
+- [x] **LMIT-05**: System prevents submission over limit or flags for review
 
 ### Expense Categories
 
@@ -134,11 +134,11 @@
 | APPR-05 | 2 | Complete |
 | APPR-06 | 2 | Complete |
 | APPR-07 | 2 | Complete |
-| LMIT-01 | 3 | Pending |
-| LMIT-02 | 3 | Pending |
-| LMIT-03 | 3 | Pending |
-| LMIT-04 | 3 | Pending |
-| LMIT-05 | 3 | Pending |
+| LMIT-01 | 3 | Complete (03-01) |
+| LMIT-02 | 3 | Complete (03-01) |
+| LMIT-03 | 3 | Complete (03-01) |
+| LMIT-04 | 3 | Complete (03-01) |
+| LMIT-05 | 3 | Complete (03-01) |
 | CATG-01 | 4 | Pending |
 | CATG-02 | 4 | Pending |
 | CATG-03 | 4 | Pending |
