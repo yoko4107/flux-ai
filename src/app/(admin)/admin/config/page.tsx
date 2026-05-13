@@ -110,6 +110,11 @@ export default function AdminConfigPage() {
   const [requireReceiptAbove, setRequireReceiptAbove] = useState(50)
   const [savingReceipt, setSavingReceipt] = useState(false)
 
+  // Overall request limit & auto-approve threshold
+  const [maxAmountPerRequest, setMaxAmountPerRequest] = useState<number>(0)
+  const [approvalThreshold, setApprovalThreshold] = useState<number>(0)
+  const [savingLimits, setSavingLimits] = useState(false)
+
   // Allowed categories
   const [allowedCategories, setAllowedCategories] = useState<string[]>(["TRAVEL", "MEALS", "SUPPLIES", "OTHER"])
   const [savingCategories, setSavingCategories] = useState(false)
@@ -163,6 +168,8 @@ export default function AdminConfigPage() {
         if (typeof c.requireReceiptAbove === "number") {
           setRequireReceiptAbove(c.requireReceiptAbove)
         }
+        if (typeof c.maxAmountPerRequest === "number") setMaxAmountPerRequest(c.maxAmountPerRequest)
+        if (typeof c.approvalThreshold === "number") setApprovalThreshold(c.approvalThreshold)
         if (Array.isArray(c.allowedCategories)) {
           setAllowedCategories(c.allowedCategories as string[])
         }
@@ -267,6 +274,17 @@ export default function AdminConfigPage() {
     if (ok) toast.success("Receipt threshold saved")
     else toast.error("Failed to save receipt threshold")
     setSavingReceipt(false)
+  }
+
+  async function handleSaveLimits() {
+    setSavingLimits(true)
+    const [ok1, ok2] = await Promise.all([
+      saveConfig("maxAmountPerRequest", maxAmountPerRequest),
+      saveConfig("approvalThreshold", approvalThreshold),
+    ])
+    if (ok1 && ok2) toast.success("Spending limits saved")
+    else toast.error("Failed to save spending limits")
+    setSavingLimits(false)
   }
 
   async function handleSaveCategories() {
@@ -496,7 +514,45 @@ export default function AdminConfigPage() {
         </div>
       </SectionCard>
 
-      {/* 5. Allowed Categories */}
+      {/* 5. Spending Limits */}
+      <SectionCard
+        title="Spending Limits"
+        metaKey="maxAmountPerRequest"
+        meta={meta}
+        onSave={handleSaveLimits}
+        saving={savingLimits}
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="maxAmountPerRequest">Overall Request Limit</Label>
+            <Input
+              id="maxAmountPerRequest"
+              type="number"
+              min={0}
+              step={1}
+              value={maxAmountPerRequest}
+              onChange={(e) => setMaxAmountPerRequest(Number(e.target.value))}
+              className="w-full"
+            />
+            <p className="text-xs text-gray-500">Maximum amount per reimbursement request (0 = no limit)</p>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="approvalThreshold">Auto-Approve Threshold</Label>
+            <Input
+              id="approvalThreshold"
+              type="number"
+              min={0}
+              step={1}
+              value={approvalThreshold}
+              onChange={(e) => setApprovalThreshold(Number(e.target.value))}
+              className="w-full"
+            />
+            <p className="text-xs text-gray-500">Requests at or below this amount skip approvers (0 = disabled)</p>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* 6. Allowed Categories */}
       <SectionCard
         title="Allowed Categories"
         metaKey="allowedCategories"

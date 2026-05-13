@@ -8,6 +8,7 @@ import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category, RequestStatus } from "@/generated/prisma"
 import { getConfig } from "@/lib/config"
 import { filterCommitteeForRequester } from "@/lib/approval-routing"
+import { validateSubmission, shouldAutoApprove } from "@/lib/submission-limits"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -67,48 +68,50 @@ export async function POST(req: NextRequest) {
   // Derive month — always based on current date + deadline cutoff, never receipt date
   const month = monthInput || await getSubmissionMonth()
 
+  // Resolve submitter's CC and org scope (needed for CC-scoped config lookups)
+  const submitter = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { costCenterId: true, organizationId: true },
+  })
+  const submitterCCId = submitter?.costCenterId ?? null
+  const orgId = submitter?.organizationId ?? session.user.organizationId ?? null
+
+  let submissionDeadline: number | null = null
+  let allowedCategories: string[] = Object.values(Category)
+  let maxAmountPerCategory: Record<string, number> = {}
+  let requireReceiptAbove: number | null = null
+  let maxAmountPerRequest: number | null = null
+  let approvalThreshold: number | null = null
+
   if (status === "SUBMITTED") {
-    // Load admin config
-    const configs = await prisma.adminConfig.findMany()
-    const configMap: Record<string, unknown> = {}
-    for (const c of configs) {
-      configMap[c.key] = c.value
-    }
+    // Load CC-scoped config (replaces broken bare findMany() that had no CC/org scope)
+    const [submissionDeadlineRaw, allowedCategoriesRaw, maxAmtPerCatRaw,
+           requireReceiptRaw, maxAmtPerReqRaw, approvalThreshRaw] =
+      await Promise.all([
+        getConfig(prisma, "submissionDeadline", orgId, submitterCCId),
+        getConfig(prisma, "allowedCategories", orgId, submitterCCId),
+        getConfig(prisma, "maxAmountPerCategory", orgId, submitterCCId),
+        getConfig(prisma, "requireReceiptAbove", orgId, submitterCCId),
+        getConfig(prisma, "maxAmountPerRequest", orgId, submitterCCId),
+        getConfig(prisma, "approvalThreshold", orgId, submitterCCId),
+      ])
 
-    // Extract nested config values (stored as JSON objects)
-    const submissionDeadlineConfig = configMap.submissionDeadline as { day?: number } | null
-    const submissionDeadline = submissionDeadlineConfig?.day ?? null
-    const allowedCategoriesConfig = configMap.allowedCategories as { categories?: string[] } | null
-    const allowedCategories = allowedCategoriesConfig?.categories ?? Object.values(Category)
-    const maxAmountPerCategory = (configMap.maxAmountPerCategory as Record<string, number>) ?? {}
-    const requireReceiptAboveConfig = configMap.requireReceiptAbove as { amount?: number } | null
-    const requireReceiptAbove = requireReceiptAboveConfig?.amount ?? null
+    // Shape fix: all stored as bare numbers, NOT as { day: number } objects
+    submissionDeadline = typeof submissionDeadlineRaw === "number" ? submissionDeadlineRaw : null
+    allowedCategories = Array.isArray(allowedCategoriesRaw) ? allowedCategoriesRaw as string[] : Object.values(Category)
+    maxAmountPerCategory = (maxAmtPerCatRaw as Record<string, number>) ?? {}
+    requireReceiptAbove = typeof requireReceiptRaw === "number" ? requireReceiptRaw : null
+    maxAmountPerRequest = typeof maxAmtPerReqRaw === "number" ? maxAmtPerReqRaw : null
+    approvalThreshold = typeof approvalThreshRaw === "number" ? approvalThreshRaw : null
 
-    const today = new Date()
-    const errors: string[] = []
-
-    // Validate category allowed
-    if (!allowedCategories.includes(category)) {
-      errors.push(`Category "${category}" is not allowed.`)
-    }
-
-    // Validate amount <= max for category
-    if (maxAmountPerCategory[category] != null && Number(amount) > maxAmountPerCategory[category]) {
-      errors.push(
-        `Amount ${amount} exceeds maximum of ${maxAmountPerCategory[category]} for category "${category}".`
-      )
-    }
-
-    // Validate receipt required
-    if (requireReceiptAbove != null && Number(amount) > requireReceiptAbove && !receiptUrl) {
-      errors.push(`A receipt is required for amounts above ${requireReceiptAbove}.`)
-    }
-
-    // Validate submission deadline
-    if (submissionDeadline != null && today.getDate() > submissionDeadline) {
-      errors.push(`Submission deadline (day ${submissionDeadline} of the month) has passed.`)
-    }
-
+    const errors = validateSubmission(Number(amount), category, receiptUrl ?? null, {
+      maxAmountPerRequest,
+      maxAmountPerCategory,
+      approvalThreshold,
+      submissionDeadline,
+      allowedCategories,
+      requireReceiptAbove,
+    })
     if (errors.length > 0) {
       return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 })
     }
@@ -155,6 +158,21 @@ export async function POST(req: NextRequest) {
     action: "REQUEST_CREATED",
     details: { status, amount: Number(amount), category },
   })
+
+  // Auto-approve: skip approval steps entirely if amount is within threshold
+  if (status === "SUBMITTED" && shouldAutoApprove(Number(amount), approvalThreshold)) {
+    await prisma.reimbursementRequest.update({
+      where: { id: request.id },
+      data: { status: "APPROVED", updatedAt: new Date() },
+    })
+    await writeAuditLog(prisma, {
+      requestId: request.id,
+      actorId: session.user.id,
+      action: "REQUEST_APPROVED",
+      details: { reason: "auto-approved: amount below approvalThreshold", amount: Number(amount) },
+    })
+    return NextResponse.json({ ...request, status: "APPROVED" }, { status: 201 })
+  }
 
   // Create approval steps if submitted
   if (status === "SUBMITTED") {
