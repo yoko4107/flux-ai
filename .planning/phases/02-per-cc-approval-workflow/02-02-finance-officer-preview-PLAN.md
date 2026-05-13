@@ -8,8 +8,9 @@ files_modified:
   - src/app/api/admin/config/route.ts
   - src/app/(admin)/admin/config/page.tsx
   - src/lib/__tests__/workflow-preview.test.ts
-autonomous: true
-requirements: [APPR-07]
+  - src/lib/workflow-preview-helpers.ts
+autonomous: false
+requirements: [APPR-05, APPR-06, APPR-07]
 # APPR-05/APPR-06 pre-existing global role promotion — verified before Phase 2, no new implementation needed.
 
 must_haves:
@@ -26,6 +27,9 @@ must_haves:
     - path: "src/lib/__tests__/workflow-preview.test.ts"
       provides: "Unit tests for WorkflowPreviewCard sequential vs parallel display logic"
       exports: []
+    - path: "src/lib/workflow-preview-helpers.ts"
+      provides: "Pure derivePreviewSteps helper used by WorkflowPreviewCard"
+      exports: ["derivePreviewSteps"]
   key_links:
     - from: "src/app/(admin)/admin/config/page.tsx loadData"
       to: "configs.financeOfficer"
@@ -143,14 +147,14 @@ interface WorkflowPreviewCardProps {
     TypeScript must compile without errors after this change.
   </action>
   <verify>
-    <automated>npx tsc --noEmit 2>&1 | head -20 && echo "tsc OK" && curl -s -X PUT http://localhost:3000/api/admin/config -H "Content-Type: application/json" -d '{"key":"financeOfficer","value":{"userId":"test"},"costCenterId":null}' | head -c 200 || echo "server not running — tsc check sufficient"</automated>
+    <automated>npx tsc --noEmit 2>&1 | head -20 && echo "tsc OK"</automated>
   </verify>
-  <done>"financeOfficer" is a valid PUT key accepted by the API. Zod validates { userId: string }. TypeScript compiles clean.</done>
+  <done>"financeOfficer" is a valid PUT key accepted by the API. Zod validates { userId: string }. TypeScript compiles clean. Runtime acceptance verified manually via the UI flow in Task 2.</done>
 </task>
 
-<task type="auto" tdd="true">
+<task type="tdd" tdd="true">
   <name>Task 2: Finance Officer select + WorkflowPreviewCard in config page</name>
-  <files>src/app/(admin)/admin/config/page.tsx, src/lib/__tests__/workflow-preview.test.ts</files>
+  <files>src/app/(admin)/admin/config/page.tsx, src/lib/__tests__/workflow-preview.test.ts, src/lib/workflow-preview-helpers.ts</files>
   <behavior>
     - Test 1 (sequential): given committee { mode: "sequential", approvers: ["u1","u2"] }, derivePreviewSteps returns [{ id:"u1", parallel:false }, { id:"u2", parallel:false }]
     - Test 2 (parallel): given committee { mode: "parallel", approvers: ["u1","u2"] }, derivePreviewSteps returns [{ id:"u1", parallel:true }, { id:"u2", parallel:true }]
@@ -334,17 +338,34 @@ interface WorkflowPreviewCardProps {
   </done>
 </task>
 
+<task type="checkpoint" autonomous="false">
+  <name>Task 3: Verify APPR-05 and APPR-06 pre-existing behavior</name>
+  <files></files>
+  <action>
+    APPR-05 (promote to Approver) and APPR-06 (demote Approver) are pre-existing behavior via global role promotion in RoleAssignmentsCard — no new code needed.
+
+    This task confirms that the PATCH endpoint for user role assignment already handles the APPROVER role, satisfying both requirements.
+
+    Run the grep below to confirm the endpoint exists and references APPROVER role handling. If the grep returns results, these requirements are satisfied by existing code.
+  </action>
+  <verify>
+    <automated>grep -r "APPROVER" src/app/api/admin/users --include="*.ts" | head -5</automated>
+  </verify>
+  <done>grep returns at least one match showing the PATCH endpoint references APPROVER role assignment, confirming APPR-05 and APPR-06 are satisfied by the pre-existing RoleAssignmentsCard + admin users API. No new code required.</done>
+</task>
+
 </tasks>
 
 <verification>
-After both tasks complete:
+After all tasks complete:
 1. `npm test -- --run src/lib/__tests__/workflow-preview.test.ts` — all 3 tests pass
 2. `npx tsc --noEmit` — zero TypeScript errors
 3. `npx vitest run` — full suite passes (no regressions from Wave 1)
 4. Grep: `grep -n "financeOfficer" src/app/api/admin/config/route.ts` — found in VALID_KEYS and valueSchemas
 5. Grep: `grep -n "WorkflowPreviewCard\|financeOfficerId" src/app/(admin)/admin/config/page.tsx` — found
 6. Grep: `grep -n "org-wide" src/app/(admin)/admin/config/page.tsx` — scope note present near RoleAssignmentsCard
-7. Manual: Visit /admin/config, select a CC with approvers, see "Approval Flow Preview" card showing the configured committee and Finance Officer; switch CC and verify Finance Officer selection resets to the new CC's saved value
+7. Grep: `grep -r "APPROVER" src/app/api/admin/users --include="*.ts" | head -5` — APPR-05/APPR-06 pre-existing
+8. Manual: Visit /admin/config, select a CC with approvers, see "Approval Flow Preview" card showing the configured committee and Finance Officer; switch CC and verify Finance Officer selection resets to the new CC's saved value
 </verification>
 
 <success_criteria>
@@ -354,6 +375,7 @@ After both tasks complete:
 - Sequential: Employee → Approver 1 → Approver 2 → Finance Officer (linear chain, numbered)
 - Parallel: Employee → [Approver 1 + Approver 2 in parallel] → Finance Officer
 - RoleAssignmentsCard preceded by "Role promotions apply org-wide — not scoped to the selected cost center" note
+- APPR-05/APPR-06 confirmed satisfied by existing PATCH /api/admin/users/[id] endpoint handling APPROVER role
 - TypeScript compiles clean; workflow-preview unit tests pass; no existing tests broken
 </success_criteria>
 

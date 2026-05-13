@@ -15,7 +15,7 @@ requirements: [APPR-02, APPR-03, APPR-04, ENFC-01]
 must_haves:
   truths:
     - "Submitting a request from a CC-member employee uses that CC's approvalCommittee, not the org-wide one"
-    - "Approval steps are created from the flat approvers[] array (not the legacy members[] shape)"
+    - "A submitted reimbursement request creates ApprovalStep rows for the cost center's configured approvers (not an empty list due to shape mismatch)"
     - "In parallel mode, all approvers receive notifications simultaneously on submission"
     - "In sequential mode, only the first approver is notified on submission"
     - "When no CC-specific committee exists, the org-wide committee is used as fallback"
