@@ -123,59 +123,59 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NAV-01 | Phase 1 | Pending |
-| NAV-02 | Phase 1 | Pending |
-| NAV-03 | Phase 1 | Pending |
-| NAV-04 | Phase 1 | Pending |
-| APPR-01 | Phase 2 | Pending |
-| APPR-02 | Phase 2 | Pending |
-| APPR-03 | Phase 2 | Pending |
-| APPR-04 | Phase 2 | Pending |
-| APPR-05 | Phase 2 | Pending |
-| APPR-06 | Phase 2 | Pending |
-| APPR-07 | Phase 2 | Pending |
-| LMIT-01 | Phase 3 | Pending |
-| LMIT-02 | Phase 3 | Pending |
-| LMIT-03 | Phase 3 | Pending |
-| LMIT-04 | Phase 3 | Pending |
-| LMIT-05 | Phase 3 | Pending |
-| CATG-01 | Phase 4 | Pending |
-| CATG-02 | Phase 4 | Pending |
-| CATG-03 | Phase 4 | Pending |
-| CATG-04 | Phase 4 | Pending |
-| CATG-05 | Phase 4 | Pending |
-| CATG-06 | Phase 4 | Pending |
-| ROLE-01 | Phase 5 | Pending |
-| ROLE-02 | Phase 5 | Pending |
-| ROLE-03 | Phase 5 | Pending |
-| ROLE-04 | Phase 5 | Pending |
-| ROLE-05 | Phase 5 | Pending |
-| ROLE-06 | Phase 5 | Pending |
-| REGN-01 | Phase 6 | Pending |
-| REGN-02 | Phase 6 | Pending |
-| REGN-03 | Phase 6 | Pending |
-| REGN-04 | Phase 6 | Pending |
-| REGN-05 | Phase 6 | Pending |
-| DEAD-01 | Phase 7 | Pending |
-| DEAD-02 | Phase 7 | Pending |
-| DEAD-03 | Phase 7 | Pending |
-| DEAD-04 | Phase 7 | Pending |
-| DEAD-05 | Phase 7 | Pending |
-| CURR-01 | Phase 8 | Pending |
-| CURR-02 | Phase 8 | Pending |
-| CURR-03 | Phase 8 | Pending |
-| CURR-04 | Phase 8 | Pending |
-| CONF-01 | Phase 9 | Pending |
-| CONF-02 | Phase 9 | Pending |
-| CONF-03 | Phase 9 | Pending |
-| CONF-04 | Phase 9 | Pending |
-| CONF-05 | Phase 9 | Pending |
-| ENFC-01 | Phase 10 | Pending |
-| ENFC-02 | Phase 10 | Pending |
-| ENFC-03 | Phase 10 | Pending |
-| ENFC-04 | Phase 10 | Pending |
-| ENFC-05 | Phase 10 | Pending |
-| ENFC-06 | Phase 10 | Pending |
+| NAV-01 | 1 | Pending |
+| NAV-02 | 1 | Pending |
+| NAV-03 | 1 | Pending |
+| NAV-04 | 1 | Pending |
+| APPR-01 | 2 | Pending |
+| APPR-02 | 2 | Pending |
+| APPR-03 | 2 | Pending |
+| APPR-04 | 2 | Pending |
+| APPR-05 | 2 | Pending |
+| APPR-06 | 2 | Pending |
+| APPR-07 | 2 | Pending |
+| LMIT-01 | 3 | Pending |
+| LMIT-02 | 3 | Pending |
+| LMIT-03 | 3 | Pending |
+| LMIT-04 | 3 | Pending |
+| LMIT-05 | 3 | Pending |
+| CATG-01 | 4 | Pending |
+| CATG-02 | 4 | Pending |
+| CATG-03 | 4 | Pending |
+| CATG-04 | 4 | Pending |
+| CATG-05 | 4 | Pending |
+| CATG-06 | 4 | Pending |
+| ROLE-01 | 5 | Pending |
+| ROLE-02 | 5 | Pending |
+| ROLE-03 | 5 | Pending |
+| ROLE-04 | 5 | Pending |
+| ROLE-05 | 5 | Pending |
+| ROLE-06 | 5 | Pending |
+| REGN-01 | 6 | Pending |
+| REGN-02 | 6 | Pending |
+| REGN-03 | 6 | Pending |
+| REGN-04 | 6 | Pending |
+| REGN-05 | 6 | Pending |
+| DEAD-01 | 7 | Pending |
+| DEAD-02 | 7 | Pending |
+| DEAD-03 | 7 | Pending |
+| DEAD-04 | 7 | Pending |
+| DEAD-05 | 7 | Pending |
+| CURR-01 | 8 | Pending |
+| CURR-02 | 8 | Pending |
+| CURR-03 | 8 | Pending |
+| CURR-04 | 8 | Pending |
+| CONF-01 | 8 | Pending |
+| CONF-02 | 8 | Pending |
+| CONF-03 | 8 | Pending |
+| CONF-04 | 8 | Pending |
+| CONF-05 | 8 | Pending |
+| ENFC-01 | 8 | Pending |
+| ENFC-02 | 8 | Pending |
+| ENFC-03 | 8 | Pending |
+| ENFC-04 | 8 | Pending |
+| ENFC-05 | 8 | Pending |
+| ENFC-06 | 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 46 total
@@ -183,5 +183,6 @@
 - Unmapped: 0 ✓
 
 ---
+
 *Requirements defined: 2026-05-13*
-*Last updated: 2026-05-13 after initial definition*
+*Traceability updated: 2026-05-13 with 8-phase roadmap*
