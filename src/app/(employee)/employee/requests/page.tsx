@@ -95,8 +95,8 @@ function RequestsContent() {
     }
     if (configRes.ok) {
       const configs = await configRes.json()
-      if (configs.submissionDeadline?.day) {
-        setSubmissionDeadlineDay(configs.submissionDeadline.day)
+      if (typeof configs.submissionDeadline === "number") {
+        setSubmissionDeadlineDay(configs.submissionDeadline)
       }
       if (configs.currentSubmissionMonth) {
         setActiveSubmissionMonth(configs.currentSubmissionMonth)

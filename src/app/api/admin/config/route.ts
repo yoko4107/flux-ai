@@ -15,6 +15,9 @@ const VALID_KEYS = [
   "notificationChannels",
   "resubmitBehavior",
   "financeOfficer",
+  "maxAmountPerRequest",
+  "paymentDeadline",
+  "approvalThreshold",
 ] as const
 
 const valueSchemas: Record<string, z.ZodTypeAny> = {
@@ -34,6 +37,9 @@ const valueSchemas: Record<string, z.ZodTypeAny> = {
   }),
   resubmitBehavior: z.enum(["reset", "continue"] as const),
   financeOfficer: z.object({ userId: z.string() }).nullable(),
+  maxAmountPerRequest: z.number().min(0),
+  paymentDeadline: z.number().int().min(1),
+  approvalThreshold: z.number().min(0),
 }
 
 // Resolve scope: SUPER_ADMIN may target any org or the global bucket (null);
