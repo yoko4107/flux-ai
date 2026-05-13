@@ -39,6 +39,10 @@ must_haves:
       to: "committee state + financeOfficer state + selectedCC"
       via: "props from parent — no additional fetch"
       pattern: "WorkflowPreviewCard.*committee.*financeOfficer"
+    - from: "handleSaveFO"
+      to: "PUT /api/admin/config"
+      via: "saveConfig('financeOfficer', { userId: financeOfficerId }, selectedCC?.id ?? null)"
+      pattern: "saveConfig.*financeOfficer.*selectedCC"
 ---
 
 <objective>

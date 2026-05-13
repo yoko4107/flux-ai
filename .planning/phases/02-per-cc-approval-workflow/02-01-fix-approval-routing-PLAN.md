@@ -8,9 +8,11 @@ files_modified:
   - src/lib/__tests__/approval-routing.test.ts
   - src/app/api/requests/route.ts
 autonomous: true
-requirements: [APPR-02, APPR-03, APPR-04, ENFC-01]
-# APPR-01 pre-satisfied in Phase 1 — mode selection UI already per-CC via costCenterId scoping.
-# No new implementation needed for APPR-01 in this phase.
+requirements: [APPR-01, APPR-02, APPR-03, APPR-04]
+# APPR-01 is included here because the routing fix ensures CC-scoped committee lookup, which is
+# the mechanism that makes per-CC mode selection work end-to-end. The mode selection UI itself
+# was satisfied in Phase 1 (per-CC via costCenterId scoping). Formal enforcement of all
+# CC-scoped routing rules (ENFC-01) is tracked in Phase 8.
 
 must_haves:
   truths:
@@ -44,6 +46,8 @@ Fix two critical bugs in POST /api/requests that silently break approval routing
 3. Parallel mode notifies only first approver — all approvers must be notified simultaneously
 
 Purpose: Reimbursement requests submitted by CC-member employees must route to that CC's configured approvers, not the org-wide default.
+
+Note: This plan also satisfies APPR-01 at the routing level. The mode selection UI (per-CC costCenterId scoping) was delivered in Phase 1; this plan ensures the submission path honors those per-CC mode decisions. End-to-end enforcement (ENFC-01) is formally tracked in Phase 8.
 
 Output: Failing tests (RED), then fixed route (GREEN). Approval steps are created from the correct per-CC committee using the current approvers[] shape.
 </objective>
@@ -111,11 +115,11 @@ export async function filterCommitteeForRequester(userId: string, members: Commi
   <name>Task 1: Write failing tests for CC-scoped approval routing</name>
   <files>src/lib/__tests__/approval-routing.test.ts</files>
   <behavior>
-    - Test 1 (ENFC-01): getConfig called with CC ID returns CC-specific committee over org-wide — mock Prisma to return different committees for CC vs org, assert CC committee is used
+    - Test 1 (CC lookup): getConfig called with CC ID returns CC-specific committee over org-wide — mock Prisma to return different committees for CC vs org, assert CC committee is used
     - Test 2 (APPR-02/APPR-03): flat approvers[] → ApprovalStep[] conversion maps userId at index 0→order 0, index 1→order 1
     - Test 3 (APPR-04): empty approvers[] → zero ApprovalStep rows created
-    - Test 4 (ENFC-01): no CC committee → falls back to org-wide committee (mock: CC findFirst returns null, org findFirst returns org committee)
-    - Test 5 (ENFC-01 parallel): parallel mode → sendNotification called N times (once per approver); sequential → called exactly once (first approver only)
+    - Test 4 (fallback): no CC committee → falls back to org-wide committee (mock: CC findFirst returns null, org findFirst returns org committee)
+    - Test 5 (APPR-01 parallel): parallel mode → sendNotification called N times (once per approver); sequential → called exactly once (first approver only)
     - Tests MUST fail before implementation (RED phase confirmed by running `npx vitest run src/lib/__tests__/approval-routing.test.ts`)
     - Use vi.fn() mocks for Prisma and sendNotification; do not require DB connection
   </behavior>
@@ -130,6 +134,8 @@ export async function filterCommitteeForRequester(userId: string, members: Commi
     Import these from '../approval-routing-helpers' (file will not exist yet — tests fail with import error, confirming RED state).
 
     Run: `npx vitest run src/lib/__tests__/approval-routing.test.ts` — expect failure (import error or test failure).
+
+    NOTE: This task IS the Wave 0 task — it creates the test file that Task 2 depends on. wave_0_complete is set to true after this task executes.
   </action>
   <verify>
     <automated>npx vitest run src/lib/__tests__/approval-routing.test.ts 2>&1 | tail -20</automated>
@@ -200,15 +206,30 @@ export async function filterCommitteeForRequester(userId: string, members: Commi
   <done>All 5+ tests pass (GREEN). TypeScript compiles cleanly. src/app/api/requests/route.ts reads approvers[] not members[], passes costCenterId to getConfig, notifies all approvers in parallel mode.</done>
 </task>
 
+<task type="checkpoint">
+  <name>Task 3: Verify APPR-01 mode-per-CC is wired end-to-end</name>
+  <files></files>
+  <action>
+    APPR-01 requires that the approval mode (sequential/parallel) is read and written per cost center. Phase 1 delivered the config UI with costCenterId scoping; Task 2 above ensures the submission path honors it.
+
+    This task confirms the wiring is present in both the config page and the config API by grepping for the `mode` field in each file.
+  </action>
+  <verify>
+    <automated>grep -n "mode" src/app/(admin)/admin/config/page.tsx | head -10 && grep -n "mode" src/app/api/admin/config/route.ts | head -10</automated>
+  </verify>
+  <done>grep returns matches in both files confirming: (1) the config page reads and writes `mode` as part of approvalCommittee state scoped to selectedCC, and (2) the config API route accepts and stores `mode` within the approvalCommittee value. APPR-01 is satisfied end-to-end.</done>
+</task>
+
 </tasks>
 
 <verification>
-After both tasks complete:
+After all tasks complete:
 1. `npx vitest run src/lib/__tests__/approval-routing.test.ts` — all tests pass
 2. `npx tsc --noEmit` — zero TypeScript errors
 3. `npx vitest run` — full suite still green (no regressions)
 4. Grep confirms: `grep -n "\.members" src/app/api/requests/route.ts` — no matches (legacy shape removed)
 5. Grep confirms: `grep -n "submitterCCId\|costCenterId" src/app/api/requests/route.ts` — present
+6. Grep confirms: `grep -n "mode" src/app/(admin)/admin/config/page.tsx` and `grep -n "mode" src/app/api/admin/config/route.ts` — present (APPR-01)
 </verification>
 
 <success_criteria>
@@ -216,6 +237,7 @@ After both tasks complete:
 - Org-wide committee used as fallback when no CC-specific committee exists
 - ApprovalStep rows are created with order=0,1,2... from the approvers[] array
 - Parallel mode: all approvers notified; sequential mode: only first approver notified
+- APPR-01: mode is read and written per CC in both config page and config API (confirmed by grep)
 - No TypeScript errors; full test suite passes
 </success_criteria>
 

@@ -54,6 +54,7 @@
 
 **Depends on:** Nothing (foundation phase)
 **Requirements:** NAV-01, NAV-02, NAV-03, NAV-04
+**Note:** APPR-01 (per-CC mode selection UI) was also satisfied in Phase 1 — the CC selector and costCenterId-scoped saves mean approval committee mode is already stored per CC.
 **Success Criteria:**
 1. Admin sees a cost center selector at the top of the config page
 2. Selecting a CC loads that CC's config (or org-wide defaults if none set)
@@ -80,6 +81,7 @@ Plans:
 
 **Depends on:** Phase 1
 **Requirements:** APPR-01, APPR-02, APPR-03, APPR-04, APPR-05, APPR-06, APPR-07
+**Note:** APPR-01 satisfied in Phase 1 (mode selection UI already per-CC via costCenterId scoping). Phase 2 completes APPR-01 end-to-end by fixing the submission routing path to honor the per-CC mode.
 **Success Criteria:**
 1. CC A can have sequential approval with Approver A+B; CC B can have parallel with Approver C only
 2. Finance Officer can be different per CC
