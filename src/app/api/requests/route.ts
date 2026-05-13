@@ -6,8 +6,8 @@ import { getSubmissionMonth } from "@/lib/submission-month"
 import { convert } from "@/lib/fx-rates"
 import { getReimbursementCurrencyForUser } from "@/lib/org-currency"
 import { Category, RequestStatus } from "@/generated/prisma"
-import { getConfig } from "@/lib/config"
-import { filterCommitteeForRequester } from "@/lib/approval-routing"
+import { resolveCommittee, buildApprovalSteps, selectNotifyTargets } from "@/lib/approval-routing-helpers"
+import { sendNotification } from "@/lib/notifications"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -158,36 +158,33 @@ export async function POST(req: NextRequest) {
 
   // Create approval steps if submitted
   if (status === "SUBMITTED") {
-    const committeeValue = (await getConfig(prisma, "approvalCommittee", session.user.organizationId)) as {
-      mode?: string
-      members?: Array<{ userId: string; order: number }>
-    } | null
-    const rawMembers = committeeValue?.members ?? []
-    // Scope the committee to the requester's cost center (members in the
-    // same CC or org-wide approvers with no CC).
-    const { members } = await filterCommitteeForRequester(session.user.id, rawMembers)
+    // Fetch submitter's cost center to enable CC-scoped committee lookup
+    const submitter = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { costCenterId: true },
+    })
+    const submitterCCId = submitter?.costCenterId ?? null
 
-    if (members.length > 0) {
-      const approverIds = members.map((m) => m.userId)
-      const approvers = await prisma.user.findMany({
-        where: { id: { in: approverIds } },
-      })
+    const committeeValue = await resolveCommittee(
+      prisma,
+      session.user.organizationId,
+      submitterCCId,
+    )
 
-      const stepData = members
-        .sort((a, b) => a.order - b.order)
-        .map((member) => {
-          const approver = approvers.find((a) => a.id === member.userId)
-          if (!approver) return null
-          return {
-            requestId: request.id,
-            approverId: member.userId,
-            order: member.order,
-          }
+    const rawApprovers = committeeValue?.approvers ?? []
+    const mode = committeeValue?.mode ?? "sequential"
+    const stepData = buildApprovalSteps(request.id, rawApprovers)
+
+    if (stepData.length > 0) {
+      await prisma.approvalStep.createMany({ data: stepData })
+      const notifyTargets = selectNotifyTargets(mode, stepData)
+      for (const approverId of notifyTargets) {
+        await sendNotification({
+          userId: approverId,
+          requestId: request.id,
+          type: "APPROVAL_REQUESTED",
+          message: `You have a new reimbursement request pending approval: ${title}`,
         })
-        .filter(Boolean) as { requestId: string; approverId: string; order: number }[]
-
-      if (stepData.length > 0) {
-        await prisma.approvalStep.createMany({ data: stepData })
       }
     }
   }
