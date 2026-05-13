@@ -1,8 +1,23 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+stopped_at: Completed 01-cost-center-config-scoping 01-api-extension-PLAN.md
+last_updated: "2026-05-13T06:02:11.995Z"
+progress:
+  total_phases: 8
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 100
+---
+
 # PROJECT STATE: System Configuration — Cost Center Admin Panel
 
 **Project:** Cost Center Admin Panel (System Configuration)  
 **Current Date:** 2026-05-13  
-**Status:** Phase 1 In Progress — Plan 01 Complete
+**Status:** Phase 1 Complete — Proceeding to Phase 2
 
 ---
 
@@ -20,13 +35,13 @@ Admins can configure all reimbursement rules per cost center without technical s
 
 ## Current Position
 
-**Phase:** Phase 1 — Cost Center Config Scoping (Plan 01/02 complete)  
+**Phase:** Phase 1 — Cost Center Config Scoping (2/2 plans complete)  
 **Milestone:** System Configuration v1  
-**Progress:** 2/46 requirements implemented (NAV-01, NAV-02)
+**Progress:** [██████████] 100%
 
 ```
 Roadmap: ████████████████████████ 100% (structure complete)
-Phase 1:  ████████████· · · · · · 50% (1/2 plans done)
+Phase 1:  ████████████████████████ 100% (2/2 plans done)
 ```
 
 ---
@@ -35,7 +50,7 @@ Phase 1:  ████████████· · · · · · 50% (1/2 plans d
 
 | Phase | Name | Requirements | Status | Est. Plans |
 |-------|------|--------------|--------|-----------|
-| 1 | Foundation | 4 | In Progress (1/2 plans) | 2 |
+| 1 | Foundation | 4 | Complete (2/2 plans) | 2 |
 | 2 | Approval Workflows | 7 | Not started | 1 |
 | 3 | Spending Policies | 5 | Not started | 1 |
 | 4 | Expense Categories | 6 | Not started | 1 |
@@ -59,6 +74,9 @@ Phase 1:  ████████████· · · · · · 50% (1/2 plans d
 | Map-based merge in mergeConfigs (orgRows first, ccRows overwrite) | Locked | ✓ O(n+m), last-write-wins |
 | null costCenterId always valid (sentinel {id:''}) | Locked | ✓ No DB query for org-wide paths |
 | (ccId ?? null) as unknown as string for Prisma compound key | Locked | ✓ Required by Prisma null cast |
+| Shared CostCenterSelector at src/components/admin/ — additive, payroll original unchanged | Locked | ✓ No breaking changes to existing pages |
+| Two separate useEffects: CC list (mount-only), config (selectedCC?.id dep) | Locked | ✓ Prevents config fetch before CCs arrive |
+| costCenterId passed at saveConfig call time — not captured in closure | Locked | ✓ Avoids stale null before CC loads |
 
 ---
 
@@ -100,16 +118,16 @@ Phase 1:  ████████████· · · · · · 50% (1/2 plans d
 
 ## Next Steps
 
-1. Execute Plan 02: UI CC Selector — Add cost center dropdown to /admin/config, wire re-fetch and saves to selected CC
-2. After Phase 1 complete: proceed to Phase 2 (Per-CC Approval Workflow)
+1. Phase 1 complete — proceed to Phase 2: Per-CC Approval Workflow
+2. Phase 2 will add per-CC approval workflow configuration (sequential vs. parallel, approver assignment per CC)
 
 ---
 
 ## Session Continuity
 
-**Last Updated:** 2026-05-13 (Plan 01 execution)  
+**Last Updated:** 2026-05-13 (Plan 02 execution)  
 **Last Editor:** Claude (executor)  
-**Stopped At:** Completed 01-cost-center-config-scoping 01-api-extension-PLAN.md  
+**Stopped At:** Completed 01-cost-center-config-scoping 02-ui-cc-selector-PLAN.md  
 **Branch:** claude/dreamy-jones-22d72f  
 **Mode:** yolo (with plan_check, verifier, nyquist_validation workflows enabled)
 

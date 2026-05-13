@@ -8,9 +8,9 @@
 ### Cost Center Navigation
 
 - [ ] **NAV-01**: Admin can view list of cost centers they manage
-- [ ] **NAV-02**: Admin can select a cost center to configure
-- [ ] **NAV-03**: Admin can see which cost center is currently selected at all times
-- [ ] **NAV-04**: Admin can quickly switch between cost centers
+- [x] **NAV-02**: Admin can select a cost center to configure
+- [x] **NAV-03**: Admin can see which cost center is currently selected at all times
+- [x] **NAV-04**: Admin can quickly switch between cost centers
 
 ### Approval Workflow Configuration
 
@@ -124,9 +124,9 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | NAV-01 | 1 | Pending |
-| NAV-02 | 1 | Pending |
-| NAV-03 | 1 | Pending |
-| NAV-04 | 1 | Pending |
+| NAV-02 | 1 | Complete |
+| NAV-03 | 1 | Complete |
+| NAV-04 | 1 | Complete |
 | APPR-01 | 2 | Pending |
 | APPR-02 | 2 | Pending |
 | APPR-03 | 2 | Pending |
