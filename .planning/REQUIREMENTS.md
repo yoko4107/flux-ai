@@ -7,7 +7,7 @@
 
 ### Cost Center Navigation
 
-- [ ] **NAV-01**: Admin can view list of cost centers they manage
+- [x] **NAV-01**: Admin can view list of cost centers they manage
 - [x] **NAV-02**: Admin can select a cost center to configure
 - [x] **NAV-03**: Admin can see which cost center is currently selected at all times
 - [x] **NAV-04**: Admin can quickly switch between cost centers
@@ -123,7 +123,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NAV-01 | 1 | Pending |
+| NAV-01 | 1 | Complete |
 | NAV-02 | 1 | Complete |
 | NAV-03 | 1 | Complete |
 | NAV-04 | 1 | Complete |

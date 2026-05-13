@@ -260,7 +260,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Cost Center Config Scoping | 2/2 | Complete   | 2026-05-13 |
+| 1. Cost Center Config Scoping | 2/2 | Complete    | 2026-05-13 |
 | 2. Per-CC Approval Workflow | 0/1 | Not started | — |
 | 3. Per-CC Policies & Deadlines | 0/1 | Not started | — |
 | 4. Custom Expense Categories | 0/1 | Not started | — |
