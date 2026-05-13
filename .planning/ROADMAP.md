@@ -60,7 +60,10 @@
 3. Saving config writes to selected CC, not overwriting org-wide
 4. Active CC selection is always visible while configuring
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
 
@@ -83,7 +86,10 @@
 3. Reimbursement approval routing reads the submitter's CC config
 4. Approval workflow preview shows "This applies to [CC Name]"
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
 
@@ -108,7 +114,10 @@
 4. Employees see deadline status on their reimbursement dashboard
 5. Overdue reimbursements flagged in admin view
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
 
@@ -133,7 +142,10 @@
 4. Admin sets $200 limit on "Meals" category
 5. Existing reimbursements with enum categories display correctly post-migration
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
 
@@ -156,7 +168,10 @@
 3. Approval routing uses CC-specific role
 4. Finance Officer sees only their CC's reimbursements
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
 
@@ -179,7 +194,10 @@
 3. Reimbursement submission shows amount in CC currency
 4. Finance summary converts to org base currency
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
 
@@ -203,7 +221,10 @@
 3. Regional rules for selected CC are visible in context
 4. Reimbursements from that location auto-apply the CC's regional rules
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
 
@@ -228,7 +249,10 @@
 4. Escalation: unapproved after 5 days auto-escalates to configured target
 5. End-to-end: submit → CC limits enforced → CC approvers notified → CC finance processes
 
-**Plans:** TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
+- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
 
 ---
 
@@ -236,7 +260,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Cost Center Config Scoping | 0/1 | Not started | — |
+| 1. Cost Center Config Scoping | 0/2 | Not started | — |
 | 2. Per-CC Approval Workflow | 0/1 | Not started | — |
 | 3. Per-CC Policies & Deadlines | 0/1 | Not started | — |
 | 4. Custom Expense Categories | 0/1 | Not started | — |
