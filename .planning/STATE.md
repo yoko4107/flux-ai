@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 03-per-cc-policies-deadlines 03-01-limit-enforcement-PLAN.md
-last_updated: "2026-05-13T17:14:00.000Z"
+stopped_at: Completed 03-per-cc-policies-deadlines 03-02-deadline-ui-PLAN.md
+last_updated: "2026-05-13T10:22:54.733Z"
 progress:
   total_phases: 8
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  completed_phases: 3
+  total_plans: 6
+  completed_plans: 6
   percent: 100
 ---
 
@@ -35,7 +35,7 @@ Admins can configure all reimbursement rules per cost center without technical s
 
 ## Current Position
 
-**Phase:** Phase 3 — Per-CC Policies & Deadlines (1/1 plans complete)  
+**Phase:** Phase 3 — Per-CC Policies & Deadlines (2/2 plans complete)  
 **Milestone:** System Configuration v1  
 **Progress:** [██████████] 100%
 
@@ -43,7 +43,7 @@ Admins can configure all reimbursement rules per cost center without technical s
 Roadmap: ████████████████████████ 100% (structure complete)
 Phase 1:  ████████████████████████ 100% (2/2 plans done)
 Phase 2:  ████████████████████████ 100% (2/2 plans done)
-Phase 3:  ████████████████████████ 100% (1/1 plans done)
+Phase 3:  ████████████████████████ 100% (2/2 plans done)
 ```
 
 ---
@@ -54,7 +54,7 @@ Phase 3:  ███████████████████████�
 |-------|------|--------------|--------|-----------|
 | 1 | Foundation | 4 | Complete (2/2 plans) | 2 |
 | 2 | Approval Workflows | 7 | Complete (2/2 plans) | 2 |
-| 3 | Spending Policies | 5 | Complete (1/1 plans) | 1 |
+| 3 | Per-CC Policies & Deadlines | 10 | Complete (2/2 plans) | 2 |
 | 4 | Expense Categories | 6 | Not started | 1 |
 | 5 | Role Management | 6 | Not started | 1 |
 | 6 | Regional Rules | 5 | Not started | 1 |
@@ -88,6 +88,8 @@ Phase 3:  ███████████████████████�
 | approvalThreshold=0 disables auto-approve (explicit opt-in) | Locked | ✓ Zero-value default is safe |
 | submissionDeadline stored as bare number (not {day: number}) | Locked | ✓ Fixes shape bug across all callers |
 | validateSubmission returns string[] details array | Locked | ✓ LMIT-05: UI can show multiple errors |
+| updatedAt used as approvedAt proxy for payment deadline | Locked | ✓ No dedicated approvedAt field; updatedAt changes on status change |
+| Public config endpoint CC-scoped via user.costCenterId+organizationId lookup | Locked | ✓ Returns correct config per employee's CC |
 
 ---
 
@@ -138,7 +140,7 @@ Phase 3:  ███████████████████████�
 
 **Last Updated:** 2026-05-13 (Plan 03-01 execution)  
 **Last Editor:** Claude (executor)  
-**Stopped At:** Completed 03-per-cc-policies-deadlines 03-01-limit-enforcement-PLAN.md
+**Stopped At:** Completed 03-per-cc-policies-deadlines 03-02-deadline-ui-PLAN.md
 **Branch:** claude/dreamy-jones-22d72f  
 **Mode:** yolo (with plan_check, verifier, nyquist_validation workflows enabled)
 

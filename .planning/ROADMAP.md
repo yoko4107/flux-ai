@@ -116,7 +116,7 @@ Plans:
 4. Employees see deadline status on their reimbursement dashboard
 5. Overdue reimbursements flagged in admin view
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 03-01-limit-enforcement-PLAN.md — Wave 0 test stubs + validateSubmission helper + fix CC-scoped config in POST /api/requests + new VALID_KEYS (maxAmountPerRequest, approvalThreshold) + admin UI fields
 - [ ] 03-02-deadline-ui-PLAN.md — paymentDeadline admin UI field + public config CC scope fix + employee request deadline status + overdue payments admin dashboard section
@@ -264,7 +264,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Cost Center Config Scoping | 2/2 | Complete    | 2026-05-13 |
 | 2. Per-CC Approval Workflow | 2/2 | Complete   | 2026-05-13 |
-| 3. Per-CC Policies & Deadlines | 1/2 | In progress | — |
+| 3. Per-CC Policies & Deadlines | 2/2 | Complete   | 2026-05-13 |
 | 4. Custom Expense Categories | 0/1 | Not started | — |
 | 5. Validation & Polish | 0/1 | Not started | — |
 

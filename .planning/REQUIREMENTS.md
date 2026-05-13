@@ -58,11 +58,11 @@
 
 ### Deadline Configuration
 
-- [ ] **DEAD-01**: Admin can set reimbursement submission deadline (e.g., end of month)
-- [ ] **DEAD-02**: Admin can set approval deadline (when approvers must act)
-- [ ] **DEAD-03**: Admin can set payment deadline (when Finance Officer pays)
-- [ ] **DEAD-04**: System shows deadline status to employees
-- [ ] **DEAD-05**: System flags overdue reimbursements for admin attention
+- [x] **DEAD-01**: Admin can set reimbursement submission deadline (e.g., end of month)
+- [x] **DEAD-02**: Admin can set approval deadline (when approvers must act)
+- [x] **DEAD-03**: Admin can set payment deadline (when Finance Officer pays)
+- [x] **DEAD-04**: System shows deadline status to employees
+- [x] **DEAD-05**: System flags overdue reimbursements for admin attention
 
 ### Currency Setup
 
@@ -156,11 +156,11 @@
 | REGN-03 | 6 | Pending |
 | REGN-04 | 6 | Pending |
 | REGN-05 | 6 | Pending |
-| DEAD-01 | 7 | Pending |
-| DEAD-02 | 7 | Pending |
-| DEAD-03 | 7 | Pending |
-| DEAD-04 | 7 | Pending |
-| DEAD-05 | 7 | Pending |
+| DEAD-01 | 7 | Complete |
+| DEAD-02 | 7 | Complete |
+| DEAD-03 | 7 | Complete |
+| DEAD-04 | 7 | Complete |
+| DEAD-05 | 7 | Complete |
 | CURR-01 | 8 | Pending |
 | CURR-02 | 8 | Pending |
 | CURR-03 | 8 | Pending |
