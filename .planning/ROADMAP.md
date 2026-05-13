@@ -88,8 +88,8 @@ Plans:
 
 **Plans:** 2 plans
 Plans:
-- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
-- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
+- [ ] 02-01-fix-approval-routing-PLAN.md — Fix POST /api/requests to use CC-scoped committee; fix approvers[] shape mismatch; fix parallel notification
+- [ ] 02-02-finance-officer-preview-PLAN.md — Add financeOfficer AdminConfig key per CC; Finance Officer select UI; WorkflowPreviewCard
 
 ---
 
@@ -261,7 +261,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Cost Center Config Scoping | 2/2 | Complete    | 2026-05-13 |
-| 2. Per-CC Approval Workflow | 0/1 | Not started | — |
+| 2. Per-CC Approval Workflow | 0/2 | Not started | — |
 | 3. Per-CC Policies & Deadlines | 0/1 | Not started | — |
 | 4. Custom Expense Categories | 0/1 | Not started | — |
 | 5. Validation & Polish | 0/1 | Not started | — |
