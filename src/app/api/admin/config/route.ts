@@ -13,6 +13,10 @@ const VALID_KEYS = [
   "requireReceiptAbove",
   "notificationChannels",
   "resubmitBehavior",
+  "financeOfficer",
+  "maxAmountPerRequest",
+  "paymentDeadline",
+  "approvalThreshold",
 ] as const
 
 const valueSchemas: Record<string, z.ZodTypeAny> = {
@@ -31,6 +35,10 @@ const valueSchemas: Record<string, z.ZodTypeAny> = {
     inApp: z.boolean(),
   }),
   resubmitBehavior: z.enum(["reset", "continue"] as const),
+  financeOfficer: z.string(),
+  maxAmountPerRequest: z.number().min(0),
+  paymentDeadline: z.number().int().min(1),
+  approvalThreshold: z.number().min(0),
 }
 
 // Resolve scope: SUPER_ADMIN may target any org or the global bucket (null);
