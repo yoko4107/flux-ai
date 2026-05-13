@@ -207,33 +207,69 @@ export default function AdminPayrollRulesPage() {
             No rules configured for <strong>{country || "this country"}</strong>. Click <strong>Add component rule</strong> to begin.
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100 space-y-6">
             {adding && (
-              <NewRuleRow
-                country={country}
-                components={components}
-                // Only block components already configured for *this same scope* —
-                // a component can have an org-wide rule AND a per-CC override.
-                existing={rules.filter((r) => (r.costCenterId ?? "ORG") === (scope || "ORG")).map((r) => r.componentId)}
-                scope={scope}
-                costCenters={costCenters}
-                onCancel={() => setAdding(false)}
-                onSaved={() => { setAdding(false); load() }}
-              />
+              <div className="divide-y divide-gray-100">
+                <NewRuleRow
+                  country={country}
+                  components={components}
+                  // Only block components already configured for *this same scope* —
+                  // a component can have an org-wide rule AND a per-CC override.
+                  existing={rules.filter((r) => (r.costCenterId ?? "ORG") === (scope || "ORG")).map((r) => r.componentId)}
+                  scope={scope}
+                  costCenters={costCenters}
+                  onCancel={() => setAdding(false)}
+                  onSaved={() => { setAdding(false); load() }}
+                />
+              </div>
             )}
-            {rules.map((r) => (
-              <RuleRow
-                key={r.id}
-                rule={r}
-                saving={saving === r.id}
-                onSave={(next) => saveRule(next)}
-                onDelete={() => deleteRule(r)}
-              />
-            ))}
+            {RulesByCategory(rules, saving, saveRule, deleteRule)}
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+function RulesByCategory(
+  rules: Rule[],
+  saving: string | null,
+  onSave: (r: Rule) => void,
+  onDelete: (r: Rule) => void
+) {
+  const categories = [
+    { type: "EARNING", label: "Earnings & Allowances", bgClass: "bg-emerald-50", textClass: "text-emerald-700" },
+    { type: "STATUTORY_DEDUCTION", label: "Tax & Statutory Deductions", bgClass: "bg-rose-50", textClass: "text-rose-700" },
+    { type: "VOLUNTARY_DEDUCTION", label: "Voluntary Deductions", bgClass: "bg-amber-50", textClass: "text-amber-700" },
+    { type: "EMPLOYER_CONTRIBUTION", label: "Employer Contributions", bgClass: "bg-sky-50", textClass: "text-sky-700" },
+  ] as const
+
+  return (
+    <>
+      {categories.map((cat) => {
+        const catRules = rules.filter((r) => r.component.type === cat.type)
+        if (catRules.length === 0) return null
+
+        return (
+          <div key={cat.type}>
+            <h3 className={`px-5 py-3 text-xs font-semibold uppercase tracking-wider ${cat.textClass} ${cat.bgClass}`}>
+              {cat.label}
+            </h3>
+            <div className="divide-y divide-gray-100">
+              {catRules.map((r) => (
+                <RuleRow
+                  key={r.id}
+                  rule={r}
+                  saving={saving === r.id}
+                  onSave={(next) => onSave(next)}
+                  onDelete={() => onDelete(r)}
+                />
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </>
   )
 }
 
