@@ -63,8 +63,13 @@ export async function GET(request: Request) {
   const scope = resolveScope(session, searchParams.get("organizationId"))
   if ("error" in scope) return NextResponse.json({ error: scope.error }, { status: scope.status })
 
+  const costCenterId = searchParams.get("costCenterId") ?? null
+
   const configs = await prisma.adminConfig.findMany({
-    where: { organizationId: scope.orgId },
+    where: {
+      organizationId: scope.orgId,
+      costCenterId: costCenterId,
+    },
     include: { updatedBy: { select: { id: true, name: true } } },
   })
 
@@ -78,7 +83,7 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ configs: result, meta, scope: { organizationId: scope.orgId } })
+  return NextResponse.json({ configs: result, meta, scope: { organizationId: scope.orgId, costCenterId } })
 }
 
 export async function PUT(request: Request) {
@@ -95,10 +100,11 @@ export async function PUT(request: Request) {
     key: z.string(),
     value: z.unknown(),
     organizationId: z.string().nullable().optional(),
+    costCenterId: z.string().nullable().optional(),
   }).safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: "Missing key or value" }, { status: 400 })
 
-  const { key, value, organizationId } = parsed.data
+  const { key, value, organizationId, costCenterId } = parsed.data
 
   if (!(VALID_KEYS as readonly string[]).includes(key)) {
     return NextResponse.json({ error: `Invalid key: ${key}` }, { status: 400 })
@@ -113,16 +119,19 @@ export async function PUT(request: Request) {
   const scope = resolveScope(session, organizationId === undefined ? null : organizationId)
   if ("error" in scope) return NextResponse.json({ error: scope.error }, { status: scope.status })
 
+  const ccId = costCenterId ?? null
+
   const existing = await prisma.adminConfig.findUnique({
-    where: { key_organizationId_costCenterId: { key, organizationId: scope.orgId ?? null as unknown as string, costCenterId: null as unknown as string } },
+    where: { key_organizationId_costCenterId: { key, organizationId: scope.orgId ?? null as unknown as string, costCenterId: ccId as unknown as string } },
   }).catch(() => null)
   const oldValue = existing?.value ?? null
 
   const updated = await prisma.adminConfig.upsert({
-    where: { key_organizationId_costCenterId: { key, organizationId: scope.orgId ?? null as unknown as string, costCenterId: null as unknown as string } },
+    where: { key_organizationId_costCenterId: { key, organizationId: scope.orgId ?? null as unknown as string, costCenterId: ccId as unknown as string } },
     create: {
       key,
       organizationId: scope.orgId,
+      costCenterId: ccId,
       value: valueResult.data as Parameters<typeof prisma.adminConfig.create>[0]["data"]["value"],
       updatedById: session.user.id,
     },
@@ -136,8 +145,8 @@ export async function PUT(request: Request) {
   await writeAuditLog(prisma, {
     actorId: session.user.id,
     action: "CONFIG_UPDATED",
-    details: { key, organizationId: scope.orgId, oldValue, newValue: valueResult.data },
+    details: { key, organizationId: scope.orgId, costCenterId: ccId, oldValue, newValue: valueResult.data },
   })
 
-  return NextResponse.json({ config: updated, scope: { organizationId: scope.orgId } })
+  return NextResponse.json({ config: updated, scope: { organizationId: scope.orgId, costCenterId: ccId } })
 }

@@ -7,8 +7,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { ChevronUp, ChevronDown, X } from "lucide-react"
+import { derivePreviewSteps } from "@/lib/workflow-preview-helpers"
 
 // Types
+interface CostCenter {
+  id: string
+  name: string
+  code: string
+}
+
 interface UserOption {
   id: string
   name: string | null
@@ -79,10 +86,183 @@ function SectionCard({
   )
 }
 
+function WorkflowPreviewCard({
+  selectedCC,
+  committee,
+  users,
+  financeOfficerId,
+}: {
+  selectedCC: CostCenter | null
+  committee: ApprovalCommittee
+  users: UserOption[]
+  financeOfficerId: string | null
+}) {
+  const fo = users.find((u) => u.id === financeOfficerId)
+  const steps = derivePreviewSteps(committee)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Approval Flow Preview</CardTitle>
+        <p className="text-xs text-gray-500">
+          How requests from{" "}
+          <span className="font-semibold">{selectedCC?.name ?? "this cost center"}</span> will be
+          routed
+        </p>
+      </CardHeader>
+      <CardContent>
+        {steps.length === 0 ? (
+          <p className="text-sm text-amber-600">
+            No approvers configured — requests will not route.
+          </p>
+        ) : (
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium">
+                Employee
+              </span>
+              <span className="text-gray-400">→</span>
+              {committee.mode === "sequential" ? (
+                steps.map((step, idx) => {
+                  const u = users.find((u) => u.id === step.id)
+                  return (
+                    <>
+                      <span
+                        key={step.id}
+                        className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
+                      >
+                        {u?.name ?? u?.email ?? "Unknown"} (Step {idx + 1})
+                      </span>
+                      {idx < steps.length - 1 && (
+                        <span className="text-gray-400">→</span>
+                      )}
+                    </>
+                  )
+                })
+              ) : (
+                <div className="flex gap-2 flex-wrap items-center">
+                  {steps.map((step) => {
+                    const u = users.find((u) => u.id === step.id)
+                    return (
+                      <span
+                        key={step.id}
+                        className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-800"
+                      >
+                        {u?.name ?? u?.email ?? "Unknown"} (parallel)
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+              <span className="text-gray-400">→</span>
+              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">
+                {fo ? (fo.name ?? fo.email) : "Finance Officer (not set)"}
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Mode:{" "}
+              {committee.mode === "sequential"
+                ? "Sequential — each approver acts in order"
+                : "Parallel — all approvers notified simultaneously; all must approve"}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function RoleAssignmentsCard({
+  users,
+  onChanged,
+}: {
+  users: UserOption[]
+  onChanged: () => void
+}) {
+  const [savingId, setSavingId] = useState<string | null>(null)
+
+  async function handleRoleChange(userId: string, newRole: string) {
+    setSavingId(userId)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      })
+      if (res.ok) {
+        toast.success("Role updated")
+        onChanged()
+      } else {
+        toast.error("Failed to update role")
+      }
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const ROLES = ["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN"] as const
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Role Assignments</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-md border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">User</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">Current Role</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">Change To</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td className="px-4 py-2">
+                    <div className="font-medium">{u.name ?? "—"}</div>
+                    <div className="text-xs text-gray-400">{u.email}</div>
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium">
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex gap-1 flex-wrap">
+                      {ROLES.filter((r) => r !== u.role).map((r) => (
+                        <Button
+                          key={r}
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-xs px-2"
+                          disabled={savingId === u.id}
+                          onClick={() => handleRoleChange(u.id, r)}
+                        >
+                          → {r}
+                        </Button>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function AdminConfigPage() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<UserOption[]>([])
   const [meta, setMeta] = useState<Record<string, ConfigMeta>>({})
+
+  // Cost center selection
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([])
+  const [selectedCC, setSelectedCC] = useState<CostCenter | null>(null)
 
   // Approval Committee
   const [committee, setCommittee] = useState<ApprovalCommittee>({
@@ -91,6 +271,10 @@ export default function AdminConfigPage() {
   })
   const [committeeAddId, setCommitteeAddId] = useState("")
   const [savingCommittee, setSavingCommittee] = useState(false)
+
+  // Finance Officer
+  const [financeOfficerId, setFinanceOfficerId] = useState<string | null>(null)
+  const [savingFO, setSavingFO] = useState(false)
 
   // Deadlines
   const [submissionDeadline, setSubmissionDeadline] = useState(25)
@@ -126,11 +310,24 @@ export default function AdminConfigPage() {
   const [resubmitBehavior, setResubmitBehavior] = useState<"reset" | "continue">("reset")
   const [savingResubmit, setSavingResubmit] = useState(false)
 
-  const loadData = useCallback(async () => {
+  // Load cost centers on mount
+  useEffect(() => {
+    fetch("/api/admin/cost-centers")
+      .then((r) => r.ok ? r.json() : { costCenters: [] })
+      .then((data: { costCenters: CostCenter[] }) => {
+        setCostCenters(data.costCenters ?? [])
+      })
+      .catch(() => {
+        toast.error("Failed to load cost centers")
+      })
+  }, [])
+
+  const loadData = useCallback(async (ccId: string | null) => {
     setLoading(true)
     try {
+      const ccParam = ccId ? `&costCenterId=${ccId}` : ""
       const [configRes, usersRes] = await Promise.all([
-        fetch("/api/admin/config"),
+        fetch(`/api/admin/config?_=${Date.now()}${ccParam}`),
         fetch("/api/admin/users"),
       ])
 
@@ -150,7 +347,17 @@ export default function AdminConfigPage() {
             mode: (raw.mode as "sequential" | "parallel") ?? "sequential",
             approvers,
           })
+        } else {
+          setCommittee({ mode: "sequential", approvers: [] })
         }
+
+        if (c.financeOfficer) {
+          const fo = c.financeOfficer as { userId?: string }
+          setFinanceOfficerId(fo.userId ?? null)
+        } else {
+          setFinanceOfficerId(null)
+        }
+
         if (typeof c.submissionDeadline === "number") {
           setSubmissionDeadline(c.submissionDeadline)
         }
@@ -186,14 +393,14 @@ export default function AdminConfigPage() {
   }, [])
 
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    loadData(selectedCC?.id ?? null)
+  }, [loadData, selectedCC?.id])
 
-  async function saveConfig(key: string, value: unknown): Promise<boolean> {
+  async function saveConfig(key: string, value: unknown, costCenterId: string | null): Promise<boolean> {
     const res = await fetch("/api/admin/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, value }),
+      body: JSON.stringify({ key, value, costCenterId }),
     })
     if (res.ok) {
       const data = await res.json()
@@ -236,17 +443,26 @@ export default function AdminConfigPage() {
 
   async function handleSaveCommittee() {
     setSavingCommittee(true)
-    const ok = await saveConfig("approvalCommittee", committee)
+    const ok = await saveConfig("approvalCommittee", committee, selectedCC?.id ?? null)
     if (ok) toast.success("Approval committee saved")
     else toast.error("Failed to save approval committee")
     setSavingCommittee(false)
   }
 
+  async function handleSaveFO() {
+    setSavingFO(true)
+    const value = financeOfficerId ? { userId: financeOfficerId } : null
+    const ok = await saveConfig("financeOfficer", value, selectedCC?.id ?? null)
+    if (ok) toast.success("Finance Officer saved")
+    else toast.error("Failed to save Finance Officer")
+    setSavingFO(false)
+  }
+
   async function handleSaveDeadlines() {
     setSavingDeadlines(true)
     const [ok1, ok2] = await Promise.all([
-      saveConfig("submissionDeadline", submissionDeadline),
-      saveConfig("approvalDeadline", approvalDeadline),
+      saveConfig("submissionDeadline", submissionDeadline, selectedCC?.id ?? null),
+      saveConfig("approvalDeadline", approvalDeadline, selectedCC?.id ?? null),
     ])
     if (ok1 && ok2) toast.success("Deadlines saved")
     else toast.error("Failed to save deadlines")
@@ -255,7 +471,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveMaxAmounts() {
     setSavingMaxAmounts(true)
-    const ok = await saveConfig("maxAmountPerCategory", maxAmounts)
+    const ok = await saveConfig("maxAmountPerCategory", maxAmounts, selectedCC?.id ?? null)
     if (ok) toast.success("Category limits saved")
     else toast.error("Failed to save category limits")
     setSavingMaxAmounts(false)
@@ -263,7 +479,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveReceipt() {
     setSavingReceipt(true)
-    const ok = await saveConfig("requireReceiptAbove", requireReceiptAbove)
+    const ok = await saveConfig("requireReceiptAbove", requireReceiptAbove, selectedCC?.id ?? null)
     if (ok) toast.success("Receipt threshold saved")
     else toast.error("Failed to save receipt threshold")
     setSavingReceipt(false)
@@ -271,7 +487,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveCategories() {
     setSavingCategories(true)
-    const ok = await saveConfig("allowedCategories", allowedCategories)
+    const ok = await saveConfig("allowedCategories", allowedCategories, selectedCC?.id ?? null)
     if (ok) toast.success("Allowed categories saved")
     else toast.error("Failed to save allowed categories")
     setSavingCategories(false)
@@ -279,7 +495,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveNotif() {
     setSavingNotif(true)
-    const ok = await saveConfig("notificationChannels", notifChannels)
+    const ok = await saveConfig("notificationChannels", notifChannels, selectedCC?.id ?? null)
     if (ok) toast.success("Notification channels saved")
     else toast.error("Failed to save notification channels")
     setSavingNotif(false)
@@ -287,7 +503,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveResubmit() {
     setSavingResubmit(true)
-    const ok = await saveConfig("resubmitBehavior", resubmitBehavior)
+    const ok = await saveConfig("resubmitBehavior", resubmitBehavior, selectedCC?.id ?? null)
     if (ok) toast.success("Resubmit behavior saved")
     else toast.error("Failed to save resubmit behavior")
     setSavingResubmit(false)
@@ -299,9 +515,44 @@ export default function AdminConfigPage() {
 
   const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "ACCOMMODATION", "COMMUNICATION", "TRAINING", "ENTERTAINMENT", "MEETING", "EQUIPMENT", "PRINTING", "SOFTWARE", "OTHER"] as const
 
+  const financeUsers = users.filter((u) => u.role === "FINANCE")
+
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-bold">System Configuration</h1>
+
+      {/* Cost Center Selector */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Cost Center Scope</CardTitle>
+          <p className="text-xs text-gray-500">
+            Select a cost center to view and edit its specific configuration. Leave unselected for
+            org-wide defaults.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <select
+            value={selectedCC?.id ?? ""}
+            onChange={(e) => {
+              const cc = costCenters.find((c) => c.id === e.target.value) ?? null
+              setSelectedCC(cc)
+            }}
+            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="">Org-wide defaults</option>
+            {costCenters.map((cc) => (
+              <option key={cc.id} value={cc.id}>
+                {cc.name} ({cc.code})
+              </option>
+            ))}
+          </select>
+          {selectedCC && (
+            <p className="text-xs text-blue-600 mt-2">
+              Editing configuration for: <span className="font-semibold">{selectedCC.name}</span>
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* 1. Approval Committee */}
       <SectionCard
@@ -400,6 +651,50 @@ export default function AdminConfigPage() {
           </div>
         </div>
       </SectionCard>
+
+      {/* Finance Officer for This Cost Center */}
+      <SectionCard
+        title="Finance Officer for This Cost Center"
+        metaKey="financeOfficer"
+        meta={meta}
+        onSave={handleSaveFO}
+        saving={savingFO}
+      >
+        <p className="text-sm text-gray-600">
+          This officer handles payment for approved requests in{" "}
+          <span className="font-medium">{selectedCC?.name ?? "this cost center"}</span>.
+        </p>
+        {financeUsers.length === 0 ? (
+          <p className="text-sm text-amber-600">
+            No Finance Officers available. Promote an employee below.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            <Label htmlFor="financeOfficer">Finance Officer</Label>
+            <select
+              id="financeOfficer"
+              value={financeOfficerId ?? ""}
+              onChange={(e) => setFinanceOfficerId(e.target.value || null)}
+              className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">None assigned</option>
+              {financeUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name ?? u.email}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Workflow Preview Card */}
+      <WorkflowPreviewCard
+        selectedCC={selectedCC}
+        committee={committee}
+        users={users}
+        financeOfficerId={financeOfficerId}
+      />
 
       {/* 2. Deadlines */}
       <SectionCard
@@ -583,6 +878,12 @@ export default function AdminConfigPage() {
           </label>
         </div>
       </SectionCard>
+
+      {/* 8. Role Assignments (org-wide) */}
+      <p className="text-xs text-gray-500 mb-2">
+        Role promotions apply org-wide — not scoped to the selected cost center.
+      </p>
+      <RoleAssignmentsCard users={users} onChanged={() => loadData(selectedCC?.id ?? null)} />
     </div>
   )
 }
