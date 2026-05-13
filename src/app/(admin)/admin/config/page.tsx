@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { ChevronUp, ChevronDown, X, UserPlus, ShieldCheck, Banknote } from "lucide-react"
+import { ChevronUp, ChevronDown, X, UserPlus, ShieldCheck, Banknote, Building2 } from "lucide-react"
+import { CostCenterSelector, type CostCenter } from "@/components/admin/CostCenterSelector"
 
 // Types
 interface UserOption {
@@ -84,6 +85,11 @@ export default function AdminConfigPage() {
   const [users, setUsers] = useState<UserOption[]>([])
   const [meta, setMeta] = useState<Record<string, ConfigMeta>>({})
 
+  // Cost center state
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([])
+  const [selectedCC, setSelectedCC] = useState<CostCenter | null>(null)
+  const [loadingCCs, setLoadingCCs] = useState(true)
+
   // Approval Committee
   const [committee, setCommittee] = useState<ApprovalCommittee>({
     mode: "sequential",
@@ -126,11 +132,30 @@ export default function AdminConfigPage() {
   const [resubmitBehavior, setResubmitBehavior] = useState<"reset" | "continue">("reset")
   const [savingResubmit, setSavingResubmit] = useState(false)
 
-  const loadData = useCallback(async () => {
+  // Load cost centers once on mount
+  useEffect(() => {
+    async function loadCostCenters() {
+      setLoadingCCs(true)
+      try {
+        const res = await fetch("/api/admin/cost-centers")
+        const data = await res.json()
+        const centers = (Array.isArray(data) ? data : data.costCenters) || []
+        setCostCenters(centers)
+        if (centers.length > 0) {
+          setSelectedCC(centers[0]) // auto-select first CC
+        }
+      } finally {
+        setLoadingCCs(false)
+      }
+    }
+    loadCostCenters()
+  }, []) // empty deps — runs once
+
+  const loadData = useCallback(async (ccId: string | null) => {
     setLoading(true)
     try {
       const [configRes, usersRes] = await Promise.all([
-        fetch("/api/admin/config"),
+        fetch(`/api/admin/config${ccId ? `?costCenterId=${ccId}` : ""}`),
         fetch("/api/admin/users"),
       ])
 
@@ -185,15 +210,18 @@ export default function AdminConfigPage() {
     }
   }, [])
 
+  // Re-fetch config whenever selectedCC changes
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    if (selectedCC !== undefined) {
+      loadData(selectedCC?.id ?? null)
+    }
+  }, [selectedCC?.id, loadData])
 
-  async function saveConfig(key: string, value: unknown): Promise<boolean> {
+  async function saveConfig(key: string, value: unknown, costCenterId: string | null): Promise<boolean> {
     const res = await fetch("/api/admin/config", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, value }),
+      body: JSON.stringify({ key, value, costCenterId }),
     })
     if (res.ok) {
       const data = await res.json()
@@ -236,7 +264,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveCommittee() {
     setSavingCommittee(true)
-    const ok = await saveConfig("approvalCommittee", committee)
+    const ok = await saveConfig("approvalCommittee", committee, selectedCC?.id ?? null)
     if (ok) toast.success("Approval committee saved")
     else toast.error("Failed to save approval committee")
     setSavingCommittee(false)
@@ -245,8 +273,8 @@ export default function AdminConfigPage() {
   async function handleSaveDeadlines() {
     setSavingDeadlines(true)
     const [ok1, ok2] = await Promise.all([
-      saveConfig("submissionDeadline", submissionDeadline),
-      saveConfig("approvalDeadline", approvalDeadline),
+      saveConfig("submissionDeadline", submissionDeadline, selectedCC?.id ?? null),
+      saveConfig("approvalDeadline", approvalDeadline, selectedCC?.id ?? null),
     ])
     if (ok1 && ok2) toast.success("Deadlines saved")
     else toast.error("Failed to save deadlines")
@@ -255,7 +283,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveMaxAmounts() {
     setSavingMaxAmounts(true)
-    const ok = await saveConfig("maxAmountPerCategory", maxAmounts)
+    const ok = await saveConfig("maxAmountPerCategory", maxAmounts, selectedCC?.id ?? null)
     if (ok) toast.success("Category limits saved")
     else toast.error("Failed to save category limits")
     setSavingMaxAmounts(false)
@@ -263,7 +291,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveReceipt() {
     setSavingReceipt(true)
-    const ok = await saveConfig("requireReceiptAbove", requireReceiptAbove)
+    const ok = await saveConfig("requireReceiptAbove", requireReceiptAbove, selectedCC?.id ?? null)
     if (ok) toast.success("Receipt threshold saved")
     else toast.error("Failed to save receipt threshold")
     setSavingReceipt(false)
@@ -271,7 +299,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveCategories() {
     setSavingCategories(true)
-    const ok = await saveConfig("allowedCategories", allowedCategories)
+    const ok = await saveConfig("allowedCategories", allowedCategories, selectedCC?.id ?? null)
     if (ok) toast.success("Allowed categories saved")
     else toast.error("Failed to save allowed categories")
     setSavingCategories(false)
@@ -279,7 +307,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveNotif() {
     setSavingNotif(true)
-    const ok = await saveConfig("notificationChannels", notifChannels)
+    const ok = await saveConfig("notificationChannels", notifChannels, selectedCC?.id ?? null)
     if (ok) toast.success("Notification channels saved")
     else toast.error("Failed to save notification channels")
     setSavingNotif(false)
@@ -287,7 +315,7 @@ export default function AdminConfigPage() {
 
   async function handleSaveResubmit() {
     setSavingResubmit(true)
-    const ok = await saveConfig("resubmitBehavior", resubmitBehavior)
+    const ok = await saveConfig("resubmitBehavior", resubmitBehavior, selectedCC?.id ?? null)
     if (ok) toast.success("Resubmit behavior saved")
     else toast.error("Failed to save resubmit behavior")
     setSavingResubmit(false)
@@ -302,6 +330,30 @@ export default function AdminConfigPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-bold">System Configuration</h1>
+
+      {/* Cost Center Selector */}
+      {loadingCCs ? (
+        <div className="text-sm text-gray-400">Loading cost centers...</div>
+      ) : costCenters.length === 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+          No cost centers configured. <a href="/admin/cost-centers" className="underline">Add a cost center</a> to begin per-CC configuration.
+        </div>
+      ) : (
+        <>
+          <CostCenterSelector
+            costCenters={costCenters}
+            selectedCC={selectedCC}
+            onSelect={setSelectedCC}
+          />
+          {selectedCC && (
+            <div className="flex items-center gap-2 text-sm text-blue-700 font-medium bg-blue-50 rounded-lg px-4 py-2 border border-blue-100">
+              <Building2 className="h-4 w-4 shrink-0" />
+              Configuring: <span className="font-semibold">{selectedCC.name}</span>
+              <span className="text-gray-400 text-xs font-normal">({selectedCC.code})</span>
+            </div>
+          )}
+        </>
+      )}
 
       {/* 1. Approval Committee */}
       <SectionCard
@@ -402,7 +454,7 @@ export default function AdminConfigPage() {
       </SectionCard>
 
       {/* 2. Role Assignments */}
-      <RoleAssignmentsCard users={users} onChanged={loadData} />
+      <RoleAssignmentsCard users={users} onChanged={() => loadData(selectedCC?.id ?? null)} />
 
       {/* 3. Deadlines */}
       <SectionCard
