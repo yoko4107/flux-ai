@@ -29,7 +29,7 @@
 - [x] **Phase 2: Per-CC Approval Workflow** — Fix approval routing bugs (plan 01 done); finance officer + preview TBD (plan 02)
 - [~] **Phase 3: Per-CC Policies & Deadlines** — Limit enforcement done (plan 01); deadline UI TBD (plan 02)
 - [x] **Phase 4: Custom Expense Categories** — Free-text custom categories added to AdminConfig JSON (completed 2026-05-14)
-- [ ] **Phase 5: Validation & Polish** — Unsaved-changes warning, validation, preview, enforcement check
+- [x] **Phase 5: Validation & Polish** — Unsaved-changes warning, validation, preview, enforcement check (completed 2026-05-14)
 
 **Cut (deferred to v2):**
 - ~~Phase 5: Per-CC Role Management~~ — Global roles sufficient for v1; CostCenterRole table deferred
@@ -192,7 +192,7 @@ Plans:
 | 2. Per-CC Approval Workflow | 2/2 | Complete   | 2026-05-13 |
 | 3. Per-CC Policies & Deadlines | 2/2 | Complete   | 2026-05-13 |
 | 4. Custom Expense Categories | 2/2 | Complete   | 2026-05-14 |
-| 5. Validation & Polish | 0/1 | Not started | — |
+| 5. Validation & Polish | 1/1 | Complete | 2026-05-14 |
 
 ---
 
