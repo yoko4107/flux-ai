@@ -151,110 +151,36 @@ Plans:
 
 ---
 
-### Phase 5: Per-CC Role Management
-**Goal:** Role assignments (Approver, Finance Officer) are scoped per cost center — same employee can have different roles in different CCs.
+### Phase 5: Validation & Polish
+**Goal:** Config saves are validated, enforcement is verified end-to-end, and unsaved-changes UX is complete.
 
-**What already exists:** Global role promotion (EMPLOYEE→APPROVER/FINANCE) on `User.role`. Cost center member list on `/admin/cost-centers`. Role promotion UI in `/admin/config`.
+**What already exists:** Save buttons per section, basic toasts on save. Approval routing enforced in submission flow. All CC-scoped config reads/writes working.
 
 **What to build:**
-- `CostCenterRole` join table (userId, costCenterId, role) for per-CC role assignments
-- Update role assignment UI to show roles in context of selected CC
-- Update approval routing to check CC-specific role, not global `User.role`
-- Finance Officers restricted to seeing only their CC's reimbursements
+- Unsaved changes indicator + warning on navigation away from config page
+- Config validation — block save if approval committee is empty, show clear error
+- End-to-end enforcement check: verify CC limits, approvers, deadlines, and custom categories all apply correctly on submission
+- Config preview already built (WorkflowPreviewCard) — verify it reflects current CC state
 
-**Depends on:** Phase 1, Phase 2
-**Requirements:** ROLE-01, ROLE-02, ROLE-03, ROLE-04, ROLE-05, ROLE-06
+**Depends on:** Phases 1–4
+**Requirements:** CONF-01, CONF-02, CONF-04, CONF-05, ENFC-01
 **Success Criteria:**
-1. Employee can be Approver in CC A, plain Employee in CC B
-2. Admin sees employee list with their CC-specific role (not global role)
-3. Approval routing uses CC-specific role
-4. Finance Officer sees only their CC's reimbursements
+1. "Unsaved changes" indicator visible when user edits config without saving
+2. Navigating away with unsaved changes shows confirmation dialog
+3. Saving with no approvers shows validation error
+4. End-to-end submission enforces CC limits, CC approvers, CC deadlines
 
-**Plans:** 2 plans
+**Plans:** 1 plan
 Plans:
-- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
-- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
+- [ ] 05-01-validation-polish-PLAN.md — Unsaved changes UX + config validation + E2E enforcement check
 
 ---
 
-### Phase 6: Currency & FX Rate Configuration
-**Goal:** Admin can configure currency and set fixed exchange rate overrides per cost center.
-
-**What already exists:** `CostCenter.currency` field (ISO-4217). Org base currency in branding. FX convert API at `/api/fx/convert` and `/api/fx/rate` (config is external/hardcoded). `ReimbursementRequest.exchangeRate` field exists.
-
-**What to build:**
-- Admin UI to set fixed FX rate override (e.g., USD→IDR fixed at 15,800)
-- Toggle: live FX rates vs. admin-set fixed rate
-- Display current effective rate for selected CC
-- Reimbursement shown in CC currency, reported in org base currency
-
-**Depends on:** Phase 1
-**Requirements:** CURR-01, CURR-02, CURR-03, CURR-04
-**Success Criteria:**
-1. Admin can lock USD→IDR at 15,800 for their CC
-2. Admin can switch CC to use live rates
-3. Reimbursement submission shows amount in CC currency
-4. Finance summary converts to org base currency
-
-**Plans:** 2 plans
-Plans:
-- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
-- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
-
----
-
-### Phase 7: Regional Rules in Config Context
-**Goal:** Per-diem rates and regional tax rules are surfaced inline within the CC config (not only on separate pages).
-
-**What already exists:** `/admin/per-diem` with per-country rates and CC overrides. `CountryPayrollRule` with per-CC tax brackets. Payroll rules at `/admin/payroll`.
-
-**What to build:**
-- CC config page: inline summary of applicable per-diem rates for selected CC's country
-- Quick-edit per-diem rate for CC without going to separate page
-- Meal deduction % config per country (breakfast/lunch/dinner deduction rates — currently missing)
-- Link-outs to full `/admin/per-diem` and `/admin/payroll` for deep editing
-- System applies CC regional rules when processing reimbursements
-
-**Depends on:** Phase 1
-**Requirements:** REGN-01, REGN-02, REGN-03, REGN-04, REGN-05
-**Success Criteria:**
-1. Admin editing "Singapore CC" sees Singapore per-diem rates inline on config page
-2. Admin can set meal deduction percentages (breakfast 10%, lunch 15%, dinner 20%)
-3. Regional rules for selected CC are visible in context
-4. Reimbursements from that location auto-apply the CC's regional rules
-
-**Plans:** 2 plans
-Plans:
-- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
-- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
-
----
-
-### Phase 8: Config Management & Enforcement
-**Goal:** Config saves are validated, enforcement is complete end-to-end, escalation is configurable.
-
-**What already exists:** Save buttons per section, basic toasts on save. Approval routing enforced in submission flow.
-
-**What to build:**
-- Unsaved changes indicator ("You have unsaved changes") + warning on navigation
-- Config validation — block save if approval committee empty, deadline invalid, etc.
-- Config preview — show how reimbursement would route under current config
-- Approval escalation config: set timeout (days), set escalation target (next approver, manager, finance)
-- Verify end-to-end enforcement: all CC rules applied on submission, routing, and payment
-
-**Depends on:** All prior phases
-**Requirements:** CONF-01, CONF-02, CONF-03, CONF-04, CONF-05, ENFC-01, ENFC-02, ENFC-03, ENFC-04, ENFC-05, ENFC-06
-**Success Criteria:**
-1. "Unsaved changes" badge visible; navigating away shows confirmation dialog
-2. Saving with no approvers shows "Approval committee cannot be empty" error
-3. Preview shows "Request from Employee X → Approver Y (3 days) → Finance Z"
-4. Escalation: unapproved after 5 days auto-escalates to configured target
-5. End-to-end: submit → CC limits enforced → CC approvers notified → CC finance processes
-
-**Plans:** 2 plans
-Plans:
-- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
-- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
+**Cut (deferred to v2):**
+- ~~Phase 5 (original): Per-CC Role Management~~ — Global roles sufficient for v1; CostCenterRole table deferred
+- ~~Phase 6: Currency & FX Rate Config~~ — CC currency already set; live rates sufficient for v1
+- ~~Phase 7: Regional Rules inline~~ — Per-diem page exists; link-out sufficient for v1
+- ~~Phase 8: Escalation config~~ — Escalation timeout hardcoded for v1
 
 ---
 
