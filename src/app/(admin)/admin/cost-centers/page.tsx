@@ -3,13 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Loader2, Plus, Save, Trash2, Building2, Users as UsersIcon,
-  Power, UserPlus, X, ChevronDown, ChevronRight, Upload, Copy, RefreshCw, Clock, CheckCircle, XCircle, Mail,
-  Link2, QrCode,
+  Power, UserPlus, X, ChevronDown, ChevronRight, Upload,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 
 const STATUS_CLASSES = {
@@ -48,31 +45,8 @@ type UserRow = {
   organizationId: string | null
 }
 
-type Invitation = {
-  id: string
-  email: string
-  phone: string | null
-  role: string
-  status: "PENDING" | "ACCEPTED" | "EXPIRED"
-  sentAt: string
-  expiresAt: string
-  acceptedAt: string | null
-  token: string
-  invitedBy: { name: string | null; email: string | null }
-  organization: { name: string } | null
-  costCenter: { name: string; code: string } | null
-}
-
-type Org = { id: string; name: string }
-
 const ROLES = ["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN"] as const
 type Role = typeof ROLES[number]
-
-const STATUS_BADGE: Record<string, { label: string; classes: string }> = {
-  PENDING: { label: "Pending", classes: "bg-yellow-100 text-yellow-700" },
-  ACCEPTED: { label: "Accepted", classes: "bg-green-100 text-green-700" },
-  EXPIRED: { label: "Expired", classes: "bg-gray-100 text-gray-500" },
-}
 
 function parseCSV(text: string): { email: string; role: Role; phone?: string }[] {
   const lines = text.trim().split("\n").filter(Boolean)
@@ -88,44 +62,25 @@ function parseCSV(text: string): { email: string; role: Role; phone?: string }[]
 }
 
 export default function CostCentersPage() {
-  const [tab, setTab] = useState<"centers" | "invitations">("centers")
   const [items, setItems] = useState<CostCenter[]>([])
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
-  const [adminProfile, setAdminProfile] = useState<{ costCenterId: string | null; costCenter: { id: string; code: string; name: string; currency: string } | null } | null>(null)
 
-  // Invitations state
-  const [invitations, setInvitations] = useState<Invitation[]>([])
-  const [orgs, setOrgs] = useState<Org[]>([])
-  const [invLoading, setInvLoading] = useState(false)
-  const [statusFilter, setStatusFilter] = useState("")
+  // Bulk upload — scoped to a specific cost center
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [bulkCostCenter, setBulkCostCenter] = useState<CostCenter | null>(null)
   const [csvText, setCsvText] = useState("")
   const [parsed, setParsed] = useState<{ email: string; role: Role; phone?: string }[]>([])
-  const [selectedOrg, setSelectedOrg] = useState("")
   const [sending, setSending] = useState(false)
   const [results, setResults] = useState<{ email: string; status: string; link?: string }[]>([])
-  const [singleOpen, setSingleOpen] = useState(false)
-  const [singleForm, setSingleForm] = useState({ email: "", role: "EMPLOYEE" as Role, phone: "", orgId: "" })
-  const [sendingSingle, setSendingSingle] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [bulkTab, setBulkTab] = useState<"csv" | "sheets">("csv")
   const [sheetsUrl, setSheetsUrl] = useState("")
   const [sheetsLoading, setSheetsLoading] = useState(false)
   const [sheetsError, setSheetsError] = useState("")
-
-  const [urlOpen, setUrlOpen] = useState(false)
-  const [urlForm, setUrlForm] = useState({ email: "", role: "EMPLOYEE" as Role, phone: "" })
-  const [urlResult, setUrlResult] = useState<{ link: string } | null>(null)
-  const [sendingUrl, setSendingUrl] = useState(false)
-
-  const [qrOpen, setQrOpen] = useState(false)
-  const [qrForm, setQrForm] = useState({ email: "", role: "EMPLOYEE" as Role, phone: "" })
-  const [qrResult, setQrResult] = useState<{ link: string; qrDataUrl: string } | null>(null)
-  const [sendingQr, setSendingQr] = useState(false)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -136,34 +91,12 @@ export default function CostCentersPage() {
       ])
       setItems(cc.costCenters ?? [])
       setUsers(Array.isArray(u) ? u : [])
-      const meRes = await fetch("/api/admin/me")
-      if (meRes.ok) {
-        const me = await meRes.json()
-        setAdminProfile({ costCenterId: me.costCenterId ?? null, costCenter: me.costCenter ?? null })
-      }
     } finally {
       setLoading(false)
     }
   }, [])
 
-  const fetchInvitations = useCallback(async () => {
-    setInvLoading(true)
-    try {
-      const [invRes, orgRes] = await Promise.all([
-        fetch("/api/admin/invitations"),
-        fetch("/api/admin/organizations"),
-      ])
-      if (invRes.ok) setInvitations(await invRes.json())
-      if (orgRes.ok) setOrgs(await orgRes.json())
-    } finally {
-      setInvLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchAll()
-    fetchInvitations()
-  }, [fetchAll, fetchInvitations])
+  useEffect(() => { fetchAll() }, [fetchAll])
 
   async function save(id: string, patch: Partial<CostCenter>) {
     setBusy(id)
@@ -247,7 +180,7 @@ export default function CostCentersPage() {
     const res = await fetch("/api/admin/invitations/bulk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invites: parsed, orgId: selectedOrg || undefined }),
+      body: JSON.stringify({ invites: parsed, costCenterId: bulkCostCenter?.id }),
     })
     const data = await res.json()
     setSending(false)
@@ -255,91 +188,21 @@ export default function CostCentersPage() {
       setResults(data.results)
       const sent = data.results.filter((r: { status: string }) => r.status === "invited").length
       toast.success(`${sent} invitation${sent !== 1 ? "s" : ""} sent`)
-      await fetchInvitations()
     } else {
       toast.error(data.error ?? "Failed to send invitations")
     }
   }
 
-  async function handleSingleSend() {
-    setSendingSingle(true)
-    const res = await fetch("/api/admin/invitations/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        invites: [{ email: singleForm.email, role: singleForm.role, phone: singleForm.phone || undefined }],
-        orgId: singleForm.orgId || undefined,
-        costCenterId: adminProfile?.costCenterId,
-      }),
-    })
-    const data = await res.json()
-    setSendingSingle(false)
-    if (res.ok) {
-      const result = data.results[0]
-      if (result.status === "invited") {
-        toast.success(`Invitation sent to ${singleForm.email}`)
-        setSingleOpen(false)
-        setSingleForm({ email: "", role: "EMPLOYEE", phone: "", orgId: "" })
-      } else {
-        toast.error(result.reason ?? "Could not send invitation")
-      }
-      await fetchInvitations()
-    } else {
-      toast.error(data.error ?? "Failed")
-    }
+  function openBulkFor(cc: CostCenter) {
+    setBulkCostCenter(cc)
+    setCsvText("")
+    setParsed([])
+    setResults([])
+    setBulkTab("csv")
+    setSheetsUrl("")
+    setSheetsError("")
+    setBulkOpen(true)
   }
-
-  async function handleUrlInvite() {
-    setSendingUrl(true)
-    const res = await fetch("/api/admin/invitations/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        invites: [{ email: urlForm.email, role: urlForm.role, phone: urlForm.phone || undefined }],
-        costCenterId: adminProfile?.costCenterId,
-      }),
-    })
-    const data = await res.json()
-    setSendingUrl(false)
-    if (res.ok && data.results[0]?.status === "invited") {
-      const link = `${window.location.origin}/register/${data.results[0].token}`
-      setUrlResult({ link })
-      await fetchInvitations()
-    } else {
-      toast.error(data.results?.[0]?.reason ?? data.error ?? "Failed to generate link")
-    }
-  }
-
-  async function handleQrInvite() {
-    setSendingQr(true)
-    const res = await fetch("/api/admin/invitations/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        invites: [{ email: qrForm.email, role: qrForm.role, phone: qrForm.phone || undefined }],
-        costCenterId: adminProfile?.costCenterId,
-      }),
-    })
-    const data = await res.json()
-    if (res.ok && data.results[0]?.status === "invited") {
-      const link = `${window.location.origin}/register/${data.results[0].token}`
-      const QRCode = (await import("qrcode")).default
-      const qrDataUrl = await QRCode.toDataURL(link, { width: 256, margin: 2 })
-      setQrResult({ link, qrDataUrl })
-      await fetchInvitations()
-    } else {
-      toast.error(data.results?.[0]?.reason ?? data.error ?? "Failed to generate QR code")
-    }
-    setSendingQr(false)
-  }
-
-  function copyLink(token: string) {
-    const link = `${window.location.origin}/register/${token}`
-    navigator.clipboard.writeText(link)
-    toast.success("Registration link copied!")
-  }
-
-  const filtered = invitations.filter((i) => !statusFilter || i.status === statusFilter)
 
   return (
     <div className="max-w-5xl space-y-5 p-1">
@@ -347,228 +210,74 @@ export default function CostCentersPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">User Cost Center</h1>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-            {tab === "centers"
-              ? `Each cost center is a regional office with its own currency. Employees are managed directly under
-            their cost center. Approver and Finance roles are assigned in `
-              : "Send and track user registration invites"}
-            {tab === "centers" && (
-              <a href="/admin/config" className="underline text-blue-600 hover:text-blue-800">Configuration</a>
-            )}
-            {tab === "centers" && "."}
+            Each cost center is a regional office with its own currency. Employees are managed directly under
+            their cost center. Approver and Finance roles are assigned in{" "}
+            <a href="/admin/config" className="underline text-blue-600 hover:text-blue-800">Configuration</a>.
           </p>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-4 border-b border-gray-200">
         <button
-          onClick={() => setTab("centers")}
-          className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${
-            tab === "centers"
-              ? "border-gray-900 text-gray-900"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
+          onClick={() => setAdding(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-3 py-2 text-sm font-medium text-white"
         >
-          Cost Centers
-        </button>
-        <button
-          onClick={() => setTab("invitations")}
-          className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
-            tab === "invitations"
-              ? "border-gray-900 text-gray-900"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          <Mail className="h-4 w-4" /> Invitations
+          <Plus className="h-3.5 w-3.5" /> New cost center
         </button>
       </div>
 
-      {tab === "centers" && (
-        <div className="flex items-center justify-end gap-2 flex-wrap">
-          <button
-            onClick={() => { setSingleOpen(true) }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
-          >
-            <Mail className="h-3.5 w-3.5" /> Manual Invite
-          </button>
-          <button
-            onClick={() => { setUrlResult(null); setUrlForm({ email: "", role: "EMPLOYEE", phone: "" }); setUrlOpen(true) }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
-          >
-            <Link2 className="h-3.5 w-3.5" /> Share URL
-          </button>
-          <button
-            onClick={() => { setQrResult(null); setQrForm({ email: "", role: "EMPLOYEE", phone: "" }); setQrOpen(true) }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
-          >
-            <QrCode className="h-3.5 w-3.5" /> QR Code
-          </button>
-          <button
-            onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-3 py-2 text-sm font-medium text-white"
-          >
-            <Plus className="h-3.5 w-3.5" /> New cost center
-          </button>
+      {loading ? (
+        <div className="p-10 text-center text-sm text-gray-500">
+          <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading…
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {adding && (
+            <NewCostCenterCard
+              onCancel={() => setAdding(false)}
+              onSaved={() => { setAdding(false); fetchAll() }}
+            />
+          )}
+          {items.length === 0 && !adding && (
+            <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center">
+              <Building2 className="mx-auto h-8 w-8 text-gray-300" />
+              <h3 className="mt-2 text-sm font-semibold text-gray-900">No cost centers yet</h3>
+              <p className="mt-1 text-sm text-gray-500">Create one for each regional office. Start with the most active.</p>
+            </div>
+          )}
+          {items.map((cc) => (
+            <CostCenterCard
+              key={cc.id}
+              cc={cc}
+              users={users.filter((u) => u.costCenterId === cc.id)}
+              busy={busy === cc.id}
+              onSave={(patch) => save(cc.id, patch)}
+              onDelete={() => remove(cc)}
+              onRefresh={fetchAll}
+              onBulkUpload={() => openBulkFor(cc)}
+            />
+          ))}
         </div>
       )}
 
-      {tab === "centers" ? (
-        <>
-          {loading ? (
-            <div className="p-10 text-center text-sm text-gray-500">
-              <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading…
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {adding && (
-                <NewCostCenterCard
-                  onCancel={() => setAdding(false)}
-                  onSaved={() => { setAdding(false); fetchAll() }}
-                />
-              )}
-              {items.length === 0 && !adding && (
-                <div className="rounded-xl border border-dashed border-gray-300 bg-white p-12 text-center">
-                  <Building2 className="mx-auto h-8 w-8 text-gray-300" />
-                  <h3 className="mt-2 text-sm font-semibold text-gray-900">No cost centers yet</h3>
-                  <p className="mt-1 text-sm text-gray-500">Create one for each regional office. Start with the most active.</p>
-                </div>
-              )}
-              {items.map((cc) => (
-                <CostCenterCard
-                  key={cc.id}
-                  cc={cc}
-                  users={users.filter((u) => u.costCenterId === cc.id)}
-                  busy={busy === cc.id}
-                  onSave={(patch) => save(cc.id, patch)}
-                  onDelete={() => remove(cc)}
-                  onRefresh={fetchAll}
-                />
-              ))}
-            </div>
-          )}
+      <UnassignedUsers
+        users={users.filter((u) => !u.costCenterId && u.role === "EMPLOYEE")}
+        costCenters={items}
+        onAssigned={fetchAll}
+      />
 
-          <UnassignedUsers
-            users={users.filter((u) => !u.costCenterId && u.role === "EMPLOYEE")}
-            costCenters={items}
-            onAssigned={fetchAll}
-          />
-        </>
-      ) : (
-        <>
-          {/* Invitations Tab */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {["", "PENDING", "ACCEPTED", "EXPIRED"].map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      statusFilter === s ? "bg-gray-900 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    {s === "" ? "All" : STATUS_BADGE[s].label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => fetchInvitations()}
-                  className="p-1.5 text-gray-400 hover:text-gray-600"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setSingleOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-300 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Invite User
-                </button>
-                <button
-                  onClick={() => { setBulkOpen(true); setResults([]) }}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-3 py-2 text-sm font-medium text-white"
-                >
-                  <Upload className="h-3.5 w-3.5" /> Bulk Upload
-                </button>
-              </div>
-            </div>
-
-            {invLoading ? (
-              <div className="p-10 text-center text-sm text-gray-500">
-                <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading…
-              </div>
-            ) : (
-              <div className="rounded-lg border border-gray-200 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Role</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Cost Center</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Sent</th>
-                      <th className="px-4 py-3 text-left font-medium text-gray-600">Expires</th>
-                      <th className="px-4 py-3 text-right font-medium text-gray-600">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filtered.map((inv) => {
-                      const badge = STATUS_BADGE[inv.status]
-                      return (
-                        <tr key={inv.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 font-medium text-gray-900">{inv.email}</td>
-                          <td className="px-4 py-3">
-                            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{inv.role}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            {inv.costCenter ? (
-                              <span className="text-xs text-gray-700">
-                                <span className="font-mono text-gray-400">{inv.costCenter.code}</span>
-                                {" "}{inv.costCenter.name}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-gray-400">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${badge.classes}`}>
-                              {inv.status === "ACCEPTED" && <CheckCircle className="h-3 w-3" />}
-                              {inv.status === "PENDING" && <Clock className="h-3 w-3" />}
-                              {inv.status === "EXPIRED" && <XCircle className="h-3 w-3" />}
-                              {badge.label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">{new Date(inv.sentAt).toLocaleDateString()}</td>
-                          <td className="px-4 py-3 text-gray-500 text-xs">{new Date(inv.expiresAt).toLocaleDateString()}</td>
-                          <td className="px-4 py-3 text-right">
-                            {inv.status === "PENDING" && (
-                              <button
-                                onClick={() => copyLink(inv.token)}
-                                className="inline-flex items-center gap-1 rounded-lg bg-white border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                              >
-                                <Copy className="h-3 w-3" /> Copy Link
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No invitations found.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-      {/* Bulk Upload Dialog */}
+      {/* Bulk Upload Dialog — scoped to a specific cost center */}
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Bulk Invite Users</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              Bulk Invite Users
+              {bulkCostCenter && (
+                <span className="ml-2 font-normal text-sm text-gray-500">
+                  — <span className="font-mono text-xs text-gray-400">{bulkCostCenter.code}</span>{" "}
+                  {bulkCostCenter.name}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-4 py-2">
-            {/* Source tabs */}
             <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
               <button
                 onClick={() => setBulkTab("csv")}
@@ -669,21 +378,6 @@ export default function CostCentersPage() {
               </div>
             )}
 
-            <div className="space-y-1">
-              <Label>Cost Center</Label>
-              {adminProfile?.costCenter ? (
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                  <span className="font-mono text-xs text-gray-500">{adminProfile.costCenter.code}</span>
-                  <span className="text-sm font-medium text-gray-800">{adminProfile.costCenter.name}</span>
-                  <span className="ml-auto text-xs text-gray-400">{adminProfile.costCenter.currency}</span>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                  No cost center assigned to your account. Contact Super Admin.
-                </div>
-              )}
-            </div>
-
             {results.length > 0 && (
               <div className="space-y-1">
                 <p className="text-xs font-medium text-gray-600">Results:</p>
@@ -714,183 +408,6 @@ export default function CostCentersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Single Invite Dialog */}
-      <Dialog open={singleOpen} onOpenChange={setSingleOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Manual Invite</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1">
-              <Label>Email</Label>
-              <Input type="email" value={singleForm.email} onChange={(e) => setSingleForm((p) => ({ ...p, email: e.target.value }))} placeholder="user@company.com" />
-            </div>
-            <div className="space-y-1">
-              <Label>Phone (optional)</Label>
-              <Input value={singleForm.phone} onChange={(e) => setSingleForm((p) => ({ ...p, phone: e.target.value }))} placeholder="+628123456789" />
-            </div>
-            <div className="space-y-1">
-              <Label>Cost Center</Label>
-              {adminProfile?.costCenter ? (
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                  <span className="font-mono text-xs text-gray-500">{adminProfile.costCenter.code}</span>
-                  <span className="text-sm font-medium text-gray-800">{adminProfile.costCenter.name}</span>
-                  <span className="ml-auto text-xs text-gray-400">{adminProfile.costCenter.currency}</span>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                  No cost center assigned to your account. Contact Super Admin.
-                </div>
-              )}
-            </div>
-            <div className="space-y-1">
-              <Label>Role</Label>
-              <select value={singleForm.role} onChange={(e) => setSingleForm((p) => ({ ...p, role: e.target.value as Role }))} className="w-full h-9 rounded-md border border-gray-300 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
-                {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSingleOpen(false)}>Cancel</Button>
-            <Button onClick={handleSingleSend} disabled={sendingSingle || !singleForm.email}>{sendingSingle ? "Sending..." : "Send Invitation"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Share URL Dialog */}
-      <Dialog open={urlOpen} onOpenChange={(open) => { setUrlOpen(open); if (!open) setUrlResult(null) }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Share Registration URL</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            {!urlResult ? (
-              <>
-                <p className="text-xs text-gray-500">Generate a registration link. The recipient will use it to create their account.</p>
-                <div className="space-y-1">
-                  <Label>Email</Label>
-                  <Input type="email" value={urlForm.email} onChange={(e) => setUrlForm((p) => ({ ...p, email: e.target.value }))} placeholder="user@company.com" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Phone (optional)</Label>
-                  <Input value={urlForm.phone} onChange={(e) => setUrlForm((p) => ({ ...p, phone: e.target.value }))} placeholder="+628123456789" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Cost Center</Label>
-                  {adminProfile?.costCenter ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                      <span className="font-mono text-xs text-gray-500">{adminProfile.costCenter.code}</span>
-                      <span className="text-sm font-medium text-gray-800">{adminProfile.costCenter.name}</span>
-                      <span className="ml-auto text-xs text-gray-400">{adminProfile.costCenter.currency}</span>
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      No cost center assigned to your account. Contact Super Admin.
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <Label>Role</Label>
-                  <select value={urlForm.role} onChange={(e) => setUrlForm((p) => ({ ...p, role: e.target.value as Role }))} className="w-full h-9 rounded-md border border-gray-300 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-              </>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-gray-600">Registration link generated! Share this URL with the user:</p>
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <span className="flex-1 text-xs font-mono text-gray-700 break-all">{urlResult.link}</span>
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(urlResult.link); toast.success("Link copied!") }}
-                    className="shrink-0 rounded p-1.5 text-gray-500 hover:bg-gray-200"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400">This link expires in 7 days.</p>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            {!urlResult ? (
-              <>
-                <Button variant="outline" onClick={() => setUrlOpen(false)}>Cancel</Button>
-                <Button onClick={handleUrlInvite} disabled={sendingUrl || !urlForm.email}>
-                  {sendingUrl ? "Generating..." : "Generate Link"}
-                </Button>
-              </>
-            ) : (
-              <Button onClick={() => setUrlOpen(false)}>Done</Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* QR Code Dialog */}
-      <Dialog open={qrOpen} onOpenChange={(open) => { setQrOpen(open); if (!open) setQrResult(null) }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>QR Code Invitation</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            {!qrResult ? (
-              <>
-                <p className="text-xs text-gray-500">Generate a QR code the user can scan to register their account.</p>
-                <div className="space-y-1">
-                  <Label>Email</Label>
-                  <Input type="email" value={qrForm.email} onChange={(e) => setQrForm((p) => ({ ...p, email: e.target.value }))} placeholder="user@company.com" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Phone (optional)</Label>
-                  <Input value={qrForm.phone} onChange={(e) => setQrForm((p) => ({ ...p, phone: e.target.value }))} placeholder="+628123456789" />
-                </div>
-                <div className="space-y-1">
-                  <Label>Cost Center</Label>
-                  {adminProfile?.costCenter ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                      <span className="font-mono text-xs text-gray-500">{adminProfile.costCenter.code}</span>
-                      <span className="text-sm font-medium text-gray-800">{adminProfile.costCenter.name}</span>
-                      <span className="ml-auto text-xs text-gray-400">{adminProfile.costCenter.currency}</span>
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      No cost center assigned to your account. Contact Super Admin.
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <Label>Role</Label>
-                  <select value={qrForm.role} onChange={(e) => setQrForm((p) => ({ ...p, role: e.target.value as Role }))} className="w-full h-9 rounded-md border border-gray-300 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <img src={qrResult.qrDataUrl} alt="Registration QR Code" className="rounded-lg border border-gray-200" width={220} height={220} />
-                <p className="text-xs text-gray-500 text-center">Scan to register. Expires in 7 days.</p>
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 w-full">
-                  <span className="flex-1 text-xs font-mono text-gray-600 break-all">{qrResult.link}</span>
-                  <button
-                    onClick={() => { navigator.clipboard.writeText(qrResult.link); toast.success("Link copied!") }}
-                    className="shrink-0 rounded p-1.5 text-gray-500 hover:bg-gray-200"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            {!qrResult ? (
-              <>
-                <Button variant="outline" onClick={() => setQrOpen(false)}>Cancel</Button>
-                <Button onClick={handleQrInvite} disabled={sendingQr || !qrForm.email}>
-                  {sendingQr ? "Generating..." : "Generate QR Code"}
-                </Button>
-              </>
-            ) : (
-              <Button onClick={() => setQrOpen(false)}>Done</Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
@@ -902,6 +419,7 @@ function CostCenterCard({
   onSave,
   onDelete,
   onRefresh,
+  onBulkUpload,
 }: {
   cc: CostCenter
   users: UserRow[]
@@ -909,6 +427,7 @@ function CostCenterCard({
   onSave: (patch: Partial<CostCenter>) => void
   onDelete: () => void
   onRefresh: () => void
+  onBulkUpload: () => void
 }) {
   const [draft, setDraft] = useState({ name: cc.name, countryCode: cc.countryCode, currency: cc.currency, active: cc.active })
   useEffect(() => setDraft({ name: cc.name, countryCode: cc.countryCode, currency: cc.currency, active: cc.active }), [cc])
@@ -1024,12 +543,20 @@ function CostCenterCard({
             </span>
             {membersOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
           </button>
-          <button
-            onClick={() => { setAddingMember(true); setMembersOpen(true) }}
-            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-          >
-            <UserPlus className="h-3 w-3" /> Add employee
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onBulkUpload}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+            >
+              <Upload className="h-3 w-3" /> Bulk Upload
+            </button>
+            <button
+              onClick={() => { setAddingMember(true); setMembersOpen(true) }}
+              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+            >
+              <UserPlus className="h-3 w-3" /> Add employee
+            </button>
+          </div>
         </div>
 
         {membersOpen && (
@@ -1111,24 +638,31 @@ function CostCenterCard({
 }
 
 function AddMemberForm({ costCenterId, onCancel, onSaved }: { costCenterId: string; onCancel: () => void; onSaved: () => void }) {
-  const [name, setName] = useState("")
   const [email, setEmail] = useState("")
-  const [department, setDepartment] = useState("")
+  const [phone, setPhone] = useState("")
+  const [role, setRole] = useState<Role>("EMPLOYEE")
   const [busy, setBusy] = useState(false)
 
-  async function save() {
+  async function send() {
+    if (!email) return
     setBusy(true)
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await fetch("/api/admin/invitations/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, role: "EMPLOYEE", department: department || undefined, costCenterId }),
+        body: JSON.stringify({ invites: [{ email, phone: phone || undefined, role }], costCenterId }),
       })
+      const data = await res.json()
       if (!res.ok) {
-        const err = await res.json().catch(() => null)
-        alert(err?.error ?? "Failed to add employee")
+        toast.error(data.error ?? "Failed to send invitation")
       } else {
-        onSaved()
+        const result = data.results?.[0]
+        if (result?.status === "skipped") {
+          toast.error("This email already has an account or pending invite")
+        } else {
+          toast.success("Invitation sent")
+          onSaved()
+        }
       }
     } finally {
       setBusy(false)
@@ -1137,38 +671,39 @@ function AddMemberForm({ costCenterId, onCancel, onSaved }: { costCenterId: stri
 
   return (
     <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-blue-700">New employee</p>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-blue-700">Invite employee</p>
       <div className="grid gap-2 sm:grid-cols-3">
         <input
-          placeholder="Full name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
-        />
-        <input
-          placeholder="Email"
+          placeholder="Email *"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
         />
         <input
-          placeholder="Department (optional)"
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
+          placeholder="Phone (optional)"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
           className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
         />
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as Role)}
+          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+        >
+          {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
       </div>
       <div className="mt-2 flex justify-end gap-2">
         <button onClick={onCancel} className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs hover:bg-gray-50">
           Cancel
         </button>
         <button
-          onClick={save}
-          disabled={busy || !name || !email}
+          onClick={send}
+          disabled={busy || !email}
           className="inline-flex items-center gap-1 rounded-md bg-[#0B1E3F] px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
         >
-          {busy && <Loader2 className="h-3 w-3 animate-spin" />} Add
+          {busy && <Loader2 className="h-3 w-3 animate-spin" />} Send Invite
         </button>
       </div>
     </div>
