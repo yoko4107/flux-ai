@@ -112,6 +112,11 @@ export default function CostCentersPage() {
   const [sendingSingle, setSendingSingle] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const [bulkTab, setBulkTab] = useState<"csv" | "sheets">("csv")
+  const [sheetsUrl, setSheetsUrl] = useState("")
+  const [sheetsLoading, setSheetsLoading] = useState(false)
+  const [sheetsError, setSheetsError] = useState("")
+
   const [urlOpen, setUrlOpen] = useState(false)
   const [urlForm, setUrlForm] = useState({ email: "", role: "EMPLOYEE" as Role, phone: "" })
   const [urlResult, setUrlResult] = useState<{ link: string } | null>(null)
@@ -208,6 +213,32 @@ export default function CostCentersPage() {
   useEffect(() => {
     if (csvText) setParsed(parseCSV(csvText))
   }, [csvText])
+
+  async function fetchFromSheets() {
+    if (!sheetsUrl.trim()) return
+    setSheetsLoading(true)
+    setSheetsError("")
+    try {
+      const res = await fetch("/api/admin/google-sheets-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: sheetsUrl.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSheetsError(data.error ?? "Failed to fetch sheet")
+        return
+      }
+      const rows = data.rows as { email: string; role: Role; phone?: string; name?: string }[]
+      const csvLines = rows.map((r) => `${r.email},${r.role}${r.phone ? `,${r.phone}` : ""}`).join("\n")
+      setCsvText(csvLines)
+      setParsed(rows.map((r) => ({ email: r.email, role: r.role, phone: r.phone })))
+      setBulkTab("csv")
+      toast.success(`${rows.length} row${rows.length !== 1 ? "s" : ""} imported from Google Sheet`)
+    } finally {
+      setSheetsLoading(false)
+    }
+  }
 
   async function handleBulkSend() {
     if (parsed.length === 0) { toast.error("No valid rows to send"); return }
@@ -537,31 +568,91 @@ export default function CostCentersPage() {
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Bulk Invite Users</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700 space-y-1">
-              <p className="font-medium">CSV format:</p>
-              <code className="block font-mono">email,role,phone (optional)</code>
-              <code className="block font-mono text-gray-500">john@company.com,EMPLOYEE,+628123456789</code>
-              <code className="block font-mono text-gray-500">sarah@company.com,APPROVER</code>
-            </div>
-
-            <div className="flex items-center gap-3">
+            {/* Source tabs */}
+            <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
               <button
-                onClick={() => fileRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                onClick={() => setBulkTab("csv")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  bulkTab === "csv" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                }`}
               >
-                <Upload className="h-4 w-4" />
-                Upload CSV file
+                CSV / Paste
               </button>
-              <span className="text-xs text-gray-400">or paste below</span>
-              <input ref={fileRef} type="file" accept=".csv,.txt" className="sr-only" onChange={handleFileUpload} />
+              <button
+                onClick={() => setBulkTab("sheets")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1 ${
+                  bulkTab === "sheets" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <svg className="h-3.5 w-3.5 text-green-600" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                </svg>
+                Google Sheet
+              </button>
             </div>
 
-            <textarea
-              value={csvText}
-              onChange={(e) => setCsvText(e.target.value)}
-              className="w-full h-32 text-xs font-mono border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
-              placeholder={"email,role\njohn@company.com,EMPLOYEE\nsarah@company.com,APPROVER"}
-            />
+            {bulkTab === "sheets" ? (
+              <div className="space-y-3">
+                <div className="bg-green-50 rounded-lg p-3 text-xs text-green-700 space-y-1">
+                  <p className="font-medium">Google Sheet requirements:</p>
+                  <p>• Sheet must be shared as <strong>"Anyone with the link can view"</strong></p>
+                  <p>• Columns: <code className="font-mono bg-green-100 px-1 rounded">email, role, phone (optional)</code></p>
+                  <p>• Or: <code className="font-mono bg-green-100 px-1 rounded">name, email, role, phone (optional)</code></p>
+                  <p>• Roles: EMPLOYEE, APPROVER, FINANCE, ADMIN</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-gray-700">Google Sheets URL</label>
+                  <input
+                    type="url"
+                    value={sheetsUrl}
+                    onChange={(e) => { setSheetsUrl(e.target.value); setSheetsError("") }}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  />
+                  {sheetsError && <p className="text-xs text-red-600">{sheetsError}</p>}
+                </div>
+                <button
+                  onClick={fetchFromSheets}
+                  disabled={sheetsLoading || !sheetsUrl.trim()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {sheetsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                    </svg>
+                  )}
+                  {sheetsLoading ? "Fetching…" : "Import from Sheet"}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700 space-y-1">
+                  <p className="font-medium">CSV format:</p>
+                  <code className="block font-mono">email,role,phone (optional)</code>
+                  <code className="block font-mono text-gray-500">john@company.com,EMPLOYEE,+628123456789</code>
+                  <code className="block font-mono text-gray-500">sarah@company.com,APPROVER</code>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload CSV file
+                  </button>
+                  <span className="text-xs text-gray-400">or paste below</span>
+                  <input ref={fileRef} type="file" accept=".csv,.txt" className="sr-only" onChange={handleFileUpload} />
+                </div>
+
+                <textarea
+                  value={csvText}
+                  onChange={(e) => setCsvText(e.target.value)}
+                  className="w-full h-32 text-xs font-mono border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+                  placeholder={"email,role\njohn@company.com,EMPLOYEE\nsarah@company.com,APPROVER"}
+                />
+              </>
+            )}
 
             {parsed.length > 0 && (
               <div className="bg-gray-50 rounded-lg p-3">
