@@ -18,6 +18,7 @@ const VALID_KEYS = [
   "maxAmountPerRequest",
   "paymentDeadline",
   "approvalThreshold",
+  "customCategories",
 ] as const
 
 const valueSchemas: Record<string, z.ZodTypeAny> = {
@@ -40,6 +41,13 @@ const valueSchemas: Record<string, z.ZodTypeAny> = {
   maxAmountPerRequest: z.number().min(0),
   paymentDeadline: z.number().int().min(1),
   approvalThreshold: z.number().min(0),
+  customCategories: z.array(
+    z.object({
+      name: z.string().min(1).max(60),
+      code: z.string().min(1).max(30).regex(/^[A-Z0-9_]+$/),
+      enabled: z.boolean(),
+    })
+  ),
 }
 
 // Resolve scope: SUPER_ADMIN may target any org or the global bucket (null);
