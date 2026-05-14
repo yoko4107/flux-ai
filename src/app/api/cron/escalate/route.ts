@@ -22,34 +22,38 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const approvalDeadlineConfig = await getConfig(prisma, "approvalDeadline")
-  const deadlineBusinessDays =
-    (approvalDeadlineConfig as { businessDays?: number } | null)?.businessDays ?? 3
+  try {
+    const approvalDeadlineConfig = await getConfig(prisma, "approvalDeadline")
+    const deadlineBusinessDays =
+      (approvalDeadlineConfig as { businessDays?: number } | null)?.businessDays ?? 3
 
-  const pendingSteps = await prisma.approvalStep.findMany({
-    where: { status: "PENDING" },
-    include: {
-      request: { select: { id: true, title: true, submittedAt: true, createdAt: true } },
-    },
-  })
+    const pendingSteps = await prisma.approvalStep.findMany({
+      where: { status: "PENDING" },
+      include: {
+        request: { select: { id: true, title: true, submittedAt: true, createdAt: true } },
+      },
+    })
 
-  const now = new Date()
-  let escalationCount = 0
+    const now = new Date()
+    let escalationCount = 0
 
-  for (const step of pendingSteps) {
-    const submittedAt = step.request.submittedAt ?? step.request.createdAt
-    const deadline = addBusinessDays(submittedAt, deadlineBusinessDays)
+    for (const step of pendingSteps) {
+      const submittedAt = step.request.submittedAt ?? step.request.createdAt
+      const deadline = addBusinessDays(submittedAt, deadlineBusinessDays)
 
-    if (deadline <= now) {
-      await sendNotification({
-        userId: step.approverId,
-        requestId: step.requestId,
-        type: "APPROVAL_OVERDUE",
-        message: `Overdue: request "${step.request.title}" needs your review.`,
-      })
-      escalationCount++
+      if (deadline <= now) {
+        await sendNotification({
+          userId: step.approverId,
+          requestId: step.requestId,
+          type: "APPROVAL_OVERDUE",
+          message: `Overdue: request "${step.request.title}" needs your review.`,
+        })
+        escalationCount++
+      }
     }
-  }
 
-  return NextResponse.json({ escalationsSent: escalationCount })
+    return NextResponse.json({ escalationsSent: escalationCount })
+  } catch (err) {
+    return NextResponse.json({ error: "Escalation job failed", detail: String(err) }, { status: 500 })
+  }
 }

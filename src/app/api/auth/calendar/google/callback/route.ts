@@ -48,32 +48,36 @@ export async function GET(req: NextRequest) {
   } catch { /* non-fatal */ }
 
   const encrypted = encryptToken(JSON.stringify(tokens))
-  await prisma.calendarToken.upsert({
-    where: { userId_provider: { userId, provider: "GOOGLE" } },
-    create: {
-      userId,
-      provider: "GOOGLE",
-      accountEmail,
-      encryptedToken: encrypted,
-      tokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-      isActive: true,
-    },
-    update: {
-      accountEmail,
-      encryptedToken: encrypted,
-      tokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-      isActive: true,
-      connectedAt: new Date(),
-    },
-  })
+  try {
+    await prisma.calendarToken.upsert({
+      where: { userId_provider: { userId, provider: "GOOGLE" } },
+      create: {
+        userId,
+        provider: "GOOGLE",
+        accountEmail,
+        encryptedToken: encrypted,
+        tokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+        isActive: true,
+      },
+      update: {
+        accountEmail,
+        encryptedToken: encrypted,
+        tokenExpiry: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+        isActive: true,
+        connectedAt: new Date(),
+      },
+    })
 
-  // Update the user's profile to record the active provider so the UI
-  // and the rest of the leave flow know what to use.
-  await prisma.userProfile.upsert({
-    where: { userId },
-    update: { calendarProvider: "GOOGLE" },
-    create: { userId, calendarProvider: "GOOGLE" },
-  })
+    // Update the user's profile to record the active provider so the UI
+    // and the rest of the leave flow know what to use.
+    await prisma.userProfile.upsert({
+      where: { userId },
+      update: { calendarProvider: "GOOGLE" },
+      create: { userId, calendarProvider: "GOOGLE" },
+    })
+  } catch {
+    return NextResponse.redirect(absolute("/profile/preferences?calendar=save_failed"))
+  }
 
   return NextResponse.redirect(absolute("/profile/preferences?calendar=connected"))
 }

@@ -21,8 +21,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ to
     data: { otp, otpExpiresAt },
   })
 
-  console.log(`[OTP] ${invitation.email} → ${otp}`)
-
   // In dev mode we return the OTP so the UI can display it
   return NextResponse.json({
     ok: true,

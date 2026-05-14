@@ -27,8 +27,7 @@ export async function GET(req: NextRequest) {
   let bundle
   try {
     bundle = await exchangeOutlookCode(code)
-  } catch (err) {
-    console.error("[calendar:outlook] token exchange failed", err)
+  } catch {
     return NextResponse.redirect(absolute("/profile/preferences?calendar=token_failed"))
   }
 
@@ -48,29 +47,33 @@ export async function GET(req: NextRequest) {
   void _omit
 
   const encrypted = encryptToken(JSON.stringify(storable))
-  await prisma.calendarToken.upsert({
-    where: { userId_provider: { userId, provider: "OUTLOOK" } },
-    create: {
-      userId,
-      provider: "OUTLOOK",
-      accountEmail,
-      encryptedToken: encrypted,
-      tokenExpiry: new Date(storable.expires_at),
-      isActive: true,
-    },
-    update: {
-      accountEmail,
-      encryptedToken: encrypted,
-      tokenExpiry: new Date(storable.expires_at),
-      isActive: true,
-      connectedAt: new Date(),
-    },
-  })
-  await prisma.userProfile.upsert({
-    where: { userId },
-    update: { calendarProvider: "OUTLOOK" },
-    create: { userId, calendarProvider: "OUTLOOK" },
-  })
+  try {
+    await prisma.calendarToken.upsert({
+      where: { userId_provider: { userId, provider: "OUTLOOK" } },
+      create: {
+        userId,
+        provider: "OUTLOOK",
+        accountEmail,
+        encryptedToken: encrypted,
+        tokenExpiry: new Date(storable.expires_at),
+        isActive: true,
+      },
+      update: {
+        accountEmail,
+        encryptedToken: encrypted,
+        tokenExpiry: new Date(storable.expires_at),
+        isActive: true,
+        connectedAt: new Date(),
+      },
+    })
+    await prisma.userProfile.upsert({
+      where: { userId },
+      update: { calendarProvider: "OUTLOOK" },
+      create: { userId, calendarProvider: "OUTLOOK" },
+    })
+  } catch {
+    return NextResponse.redirect(absolute("/profile/preferences?calendar=save_failed"))
+  }
 
   return NextResponse.redirect(absolute("/profile/preferences?calendar=connected"))
 }

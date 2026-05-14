@@ -25,8 +25,7 @@ export async function GET(req: NextRequest) {
   let bundle
   try {
     bundle = await exchangeLarkCode(code)
-  } catch (err) {
-    console.error("[calendar:lark] token exchange failed", err)
+  } catch {
     return NextResponse.redirect(absolute("/profile/preferences?calendar=token_failed"))
   }
 
@@ -34,29 +33,33 @@ export async function GET(req: NextRequest) {
   // stable user identifier. We could resolve email via /authen/v1/user_info
   // but that's an extra round-trip; skip it for now.
   const encrypted = encryptToken(JSON.stringify(bundle))
-  await prisma.calendarToken.upsert({
-    where: { userId_provider: { userId, provider: "LARK" } },
-    create: {
-      userId,
-      provider: "LARK",
-      accountEmail: bundle.open_id,
-      encryptedToken: encrypted,
-      tokenExpiry: new Date(bundle.expires_at),
-      isActive: true,
-    },
-    update: {
-      accountEmail: bundle.open_id,
-      encryptedToken: encrypted,
-      tokenExpiry: new Date(bundle.expires_at),
-      isActive: true,
-      connectedAt: new Date(),
-    },
-  })
-  await prisma.userProfile.upsert({
-    where: { userId },
-    update: { calendarProvider: "LARK" },
-    create: { userId, calendarProvider: "LARK" },
-  })
+  try {
+    await prisma.calendarToken.upsert({
+      where: { userId_provider: { userId, provider: "LARK" } },
+      create: {
+        userId,
+        provider: "LARK",
+        accountEmail: bundle.open_id,
+        encryptedToken: encrypted,
+        tokenExpiry: new Date(bundle.expires_at),
+        isActive: true,
+      },
+      update: {
+        accountEmail: bundle.open_id,
+        encryptedToken: encrypted,
+        tokenExpiry: new Date(bundle.expires_at),
+        isActive: true,
+        connectedAt: new Date(),
+      },
+    })
+    await prisma.userProfile.upsert({
+      where: { userId },
+      update: { calendarProvider: "LARK" },
+      create: { userId, calendarProvider: "LARK" },
+    })
+  } catch {
+    return NextResponse.redirect(absolute("/profile/preferences?calendar=save_failed"))
+  }
   return NextResponse.redirect(absolute("/profile/preferences?calendar=connected"))
 }
 
