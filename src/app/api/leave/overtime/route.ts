@@ -119,11 +119,16 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const employeeId = url.searchParams.get("employeeId")
 
+  const costCenterId = url.searchParams.get("costCenterId")
+
   const where: Record<string, unknown> = {}
   if (role === "ADMIN" && orgId) where.organizationId = orgId
   else if (role === "APPROVER") where.supervisorId = session.user.id
   else where.employeeId = session.user.id
   if (employeeId) where.employeeId = employeeId
+  if (costCenterId && (role === "ADMIN" || role === "SUPER_ADMIN")) {
+    where.employee = { costCenterId }
+  }
 
   const records = await prisma.overtimeRecord.findMany({
     where,

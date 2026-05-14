@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Loader2, Plus, Trash2, Calendar, BarChart3, Mail, ListTree, Clock, X, Gift, Sliders, RotateCcw, CheckCircle2, Users as UsersIcon, CalendarPlus } from "lucide-react"
+import { CostCenterSelector, type CostCenter } from "@/components/admin/CostCenterSelector"
 
 // Admin leave console — single page with tabs.
 //   1. Dashboard  — KPIs
@@ -13,6 +14,18 @@ type Tab = "dashboard" | "balances" | "holidays" | "events" | "types" | "overtim
 
 export default function AdminLeavePage() {
   const [tab, setTab] = useState<Tab>("dashboard")
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([])
+  const [selectedCC, setSelectedCC] = useState<CostCenter | null>(null)
+
+  useEffect(() => {
+    fetch("/api/admin/cost-centers")
+      .then((r) => r.json())
+      .then((d) => {
+        const centers = (Array.isArray(d) ? d : d.costCenters) as CostCenter[] ?? []
+        setCostCenters(centers)
+        if (centers.length > 0) setSelectedCC(centers[0])
+      })
+  }, [])
 
   return (
     <div className="space-y-6 p-1">
@@ -20,6 +33,14 @@ export default function AdminLeavePage() {
         <h1 className="text-2xl font-bold text-gray-900">Leave & Calendar — Admin</h1>
         <p className="text-sm text-gray-500 mt-1">Holidays, leave types, analytics, email audit log.</p>
       </div>
+
+      {costCenters.length > 0 && (
+        <CostCenterSelector
+          costCenters={costCenters}
+          selectedCC={selectedCC}
+          onSelect={setSelectedCC}
+        />
+      )}
 
       <div className="flex gap-1 border-b border-gray-200">
         {([
@@ -44,14 +65,14 @@ export default function AdminLeavePage() {
         ))}
       </div>
 
-      {tab === "dashboard" && <Dashboard />}
-      {tab === "balances" && <Balances />}
+      {tab === "dashboard" && <Dashboard costCenter={selectedCC} />}
+      {tab === "balances" && <Balances costCenter={selectedCC} />}
       {tab === "holidays" && <Holidays />}
       {tab === "events" && <Events />}
       {tab === "types" && <Types />}
-      {tab === "overtime" && <Overtime />}
+      {tab === "overtime" && <Overtime costCenter={selectedCC} />}
       {tab === "policy" && <Policy />}
-      {tab === "audit" && <Audit />}
+      {tab === "audit" && <Audit costCenter={selectedCC} />}
     </div>
   )
 }
@@ -81,7 +102,7 @@ type AdminBalance = {
   adjustment?: number
 }
 
-function Balances() {
+function Balances({ costCenter }: { costCenter: CostCenter | null }) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [selected, setSelected] = useState<AdminUser | null>(null)
   const [balances, setBalances] = useState<AdminBalance[]>([])
@@ -90,15 +111,16 @@ function Balances() {
   const [adjOpen, setAdjOpen] = useState<{ leaveTypeId: string; code: string; name: string } | null>(null)
 
   useEffect(() => {
-    fetch("/api/admin/users")
+    const qs = costCenter ? `?costCenterId=${costCenter.id}` : ""
+    fetch(`/api/admin/users${qs}`)
       .then((r) => r.json())
       .then((d) => {
         const list = (d.users ?? d ?? []) as AdminUser[]
         setUsers(list)
-        if (list.length && !selected) setSelected(list[0])
+        setSelected(list.length ? list[0] : null)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [costCenter?.id])
 
   async function load() {
     if (!selected) return
@@ -267,7 +289,7 @@ function AdjustmentModal({ employee, leaveType, onClose, onDone }: { employee: A
 
 // ---- Overtime ------------------------------------------------------------
 
-function Overtime() {
+function Overtime({ costCenter }: { costCenter: CostCenter | null }) {
   const [records, setRecords] = useState<{
     id: string
     date: string
@@ -286,11 +308,12 @@ function Overtime() {
 
   async function load() {
     setLoading(true)
-    const data = await fetch("/api/leave/overtime").then((r) => r.json())
+    const qs = costCenter ? `?costCenterId=${costCenter.id}` : ""
+    const data = await fetch(`/api/leave/overtime${qs}`).then((r) => r.json())
     setRecords(data.records ?? [])
     setLoading(false)
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [costCenter?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function reject(id: string) {
     const reason = prompt("Reason for rejecting this overtime entry (≥10 chars):")
@@ -390,7 +413,7 @@ function Overtime() {
 
 // ---- Dashboard -----------------------------------------------------------
 
-function Dashboard() {
+function Dashboard({ costCenter }: { costCenter: CostCenter | null }) {
   const [data, setData] = useState<{
     byStatus: Record<string, number>
     totalRequests: number
@@ -399,8 +422,9 @@ function Dashboard() {
     topLeaveTypes: { id: string; name: string; colorHex: string; days: number }[]
   } | null>(null)
   useEffect(() => {
-    fetch("/api/leave/admin/analytics").then((r) => r.json()).then(setData)
-  }, [])
+    const qs = costCenter ? `?costCenterId=${costCenter.id}` : ""
+    fetch(`/api/leave/admin/analytics${qs}`).then((r) => r.json()).then(setData)
+  }, [costCenter?.id])
   if (!data) return <Loading />
   const { byStatus, totalRequests, negotiationRate, avgResolutionDays, topLeaveTypes } = data
   return (
@@ -924,7 +948,7 @@ const EMAIL_TYPES = [
   "OVERTIME_REQUEST", "OVERTIME_APPROVED",
 ] as const
 
-function Audit() {
+function Audit({ costCenter }: { costCenter: CostCenter | null }) {
   const [events, setEvents] = useState<{
     id: string
     sentAt: string
@@ -946,12 +970,13 @@ function Audit() {
     if (filters.action) qs.set("action", filters.action)
     if (filters.from) qs.set("from", filters.from)
     if (filters.toDate) qs.set("to_date", filters.toDate)
+    if (costCenter) qs.set("costCenterId", costCenter.id)
     const d = await fetch(`/api/leave/admin/email-audit?${qs.toString()}`).then((r) => r.json())
     setEvents(d.events ?? [])
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [filters.type, filters.action]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [filters.type, filters.action, costCenter?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function clearFilters() {
     setFilters({ type: "", to: "", action: "", from: "", toDate: "" })

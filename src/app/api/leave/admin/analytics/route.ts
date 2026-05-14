@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
@@ -8,21 +8,26 @@ import { prisma } from "@/lib/prisma"
 //   - average time-to-resolution (days)
 //   - top leave types by approved-day count
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
+  const { searchParams } = new URL(req.url)
+  const costCenterId = searchParams.get("costCenterId")
+
   const orgFilter =
     session.user.role === "ADMIN" && session.user.organizationId
       ? { organizationId: session.user.organizationId }
       : {}
 
+  const ccFilter = costCenterId ? { employee: { costCenterId } } : {}
+
   const [requests, leaveTypes] = await Promise.all([
     prisma.leaveRequest.findMany({
-      where: orgFilter,
+      where: { ...orgFilter, ...ccFilter },
       include: {
         proposals: { select: { id: true } },
         leaveType: { select: { id: true, name: true } },
