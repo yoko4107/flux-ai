@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { getConfig } from "@/lib/config"
 import { Suspense } from "react"
 import { DashboardFilters } from "./_components/dashboard-filters"
+import { UsersPayrollSection } from "./_components/users-payroll-section"
 import { auth } from "@/lib/auth"
 
 function addBusinessDays(date: Date, days: number): Date {
@@ -278,6 +279,9 @@ export default async function AdminDashboard({
           )}
         </CardContent>
       </Card>
+
+      {/* Employees & Payroll inline management */}
+      <UsersPayrollSection />
 
       {/* Overdue payments list */}
       <Card>
