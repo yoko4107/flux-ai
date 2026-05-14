@@ -1,3 +1,20 @@
+/**
+ * ENFC-01 Enforcement Verification (2026-05-14)
+ *
+ * Sequential routing:
+ * - On approve: marks calling approver's step APPROVED.
+ * - If remaining steps exist, notifies the lowest-order PENDING step approver.
+ * - Request reaches APPROVED only when all steps are APPROVED.
+ * - Verdict: CORRECT — step-by-step gating enforced.
+ *
+ * Parallel routing:
+ * - All steps created at submission (order may differ; all PENDING).
+ * - On each approve: marks that approver's step APPROVED.
+ * - If other steps remain PENDING, nextStep lookup finds one and sends a notification.
+ *   In parallel mode this sends a reminder to the next uncompleted approver — acceptable behavior.
+ * - Request reaches APPROVED only when ALL steps are APPROVED (allSteps.every check).
+ * - Verdict: CORRECT — all-must-approve gate enforced.
+ */
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
