@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getSubmissionMonth } from "@/lib/submission-month"
 import { getConfig } from "@/lib/config"
+import { mergeCategories } from "@/lib/custom-categories"
 
 // Public config endpoint — returns non-sensitive config values
 // for any authenticated user, CC-scoped to the calling user's cost center
@@ -22,7 +23,8 @@ export async function GET() {
 
   // Fetch all config values with CC-scoped resolution
   const [submissionDeadlineRaw, allowedCategoriesRaw, maxAmtPerCatRaw,
-         requireReceiptRaw, approvalDeadlineRaw, paymentDeadlineRaw] =
+         requireReceiptRaw, approvalDeadlineRaw, paymentDeadlineRaw,
+         customCategoriesRaw] =
     await Promise.all([
       getConfig(prisma, "submissionDeadline", orgId, ccId),
       getConfig(prisma, "allowedCategories", orgId, ccId),
@@ -30,6 +32,7 @@ export async function GET() {
       getConfig(prisma, "requireReceiptAbove", orgId, ccId),
       getConfig(prisma, "approvalDeadline", orgId, ccId),
       getConfig(prisma, "paymentDeadline", orgId, ccId),
+      getConfig(prisma, "customCategories", orgId, ccId),
     ])
 
   const result = {
@@ -40,6 +43,10 @@ export async function GET() {
     approvalDeadline: typeof approvalDeadlineRaw === "number" ? approvalDeadlineRaw : null,
     paymentDeadline: typeof paymentDeadlineRaw === "number" ? paymentDeadlineRaw : null,
     currentSubmissionMonth: await getSubmissionMonth(),
+    customCategories: Array.isArray(customCategoriesRaw)
+      ? (customCategoriesRaw as { name: string; code: string; enabled: boolean }[]).filter(c => c.enabled)
+      : [],
+    allCategories: mergeCategories(customCategoriesRaw),
   }
 
   return NextResponse.json(result)

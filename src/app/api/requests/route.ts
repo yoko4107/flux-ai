@@ -10,6 +10,7 @@ import { resolveCommittee, buildApprovalSteps, selectNotifyTargets } from "@/lib
 import { sendNotification } from "@/lib/notifications"
 import { getConfig } from "@/lib/config"
 import { validateSubmission, shouldAutoApprove } from "@/lib/submission-limits"
+import { mergeCategories } from "@/lib/custom-categories"
 
 export async function GET(req: NextRequest) {
   const session = await auth()
@@ -58,7 +59,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
   }
 
-  if (!Object.values(Category).includes(category)) {
+  // Allow both enum values AND custom category codes (validated against CC config when SUBMITTED)
+  // For DRAFT status, accept any non-empty string that looks like a category code
+  const isEnumCategory = Object.values(Category).includes(category as Category)
+  const isCustomCategoryCode = /^[A-Z0-9_]+$/.test(category)
+  if (!isEnumCategory && !isCustomCategoryCode) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 })
   }
 
@@ -87,7 +92,8 @@ export async function POST(req: NextRequest) {
   if (status === "SUBMITTED") {
     // Load CC-scoped config (replaces broken bare findMany() that had no CC/org scope)
     const [submissionDeadlineRaw, allowedCategoriesRaw, maxAmtPerCatRaw,
-           requireReceiptRaw, maxAmtPerReqRaw, approvalThreshRaw] =
+           requireReceiptRaw, maxAmtPerReqRaw, approvalThreshRaw,
+           customCategoriesRaw] =
       await Promise.all([
         getConfig(prisma, "submissionDeadline", orgId, submitterCCId),
         getConfig(prisma, "allowedCategories", orgId, submitterCCId),
@@ -95,11 +101,15 @@ export async function POST(req: NextRequest) {
         getConfig(prisma, "requireReceiptAbove", orgId, submitterCCId),
         getConfig(prisma, "maxAmountPerRequest", orgId, submitterCCId),
         getConfig(prisma, "approvalThreshold", orgId, submitterCCId),
+        getConfig(prisma, "customCategories", orgId, submitterCCId),
       ])
 
     // Shape fix: all stored as bare numbers, NOT as { day: number } objects
     submissionDeadline = typeof submissionDeadlineRaw === "number" ? submissionDeadlineRaw : null
-    allowedCategories = Array.isArray(allowedCategoriesRaw) ? allowedCategoriesRaw as string[] : Object.values(Category)
+    // Merge enum categories filtered by allowedCategories config, plus any enabled custom categories
+    const baseAllowed: string[] = Array.isArray(allowedCategoriesRaw) ? allowedCategoriesRaw as string[] : Object.values(Category)
+    const customOnlyCodes: string[] = mergeCategories(customCategoriesRaw).filter(code => !Object.values(Category).includes(code as Category))
+    allowedCategories = [...baseAllowed, ...customOnlyCodes]
     maxAmountPerCategory = (maxAmtPerCatRaw as Record<string, number>) ?? {}
     requireReceiptAbove = typeof requireReceiptRaw === "number" ? requireReceiptRaw : null
     maxAmountPerRequest = typeof maxAmtPerReqRaw === "number" ? maxAmtPerReqRaw : null
@@ -118,13 +128,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // v1 DB constraint: ReimbursementRequest.category is a Prisma Category enum.
+  // Map custom category code → "OTHER" before persisting to DB.
+  const dbCategory: Category = Object.values(Category).includes(category as Category)
+    ? (category as Category)
+    : Category.OTHER
+
   const createData: Record<string, unknown> = {
     employeeId: session.user.id,
     title,
     description: description ?? null,
     amount,
     currency,
-    category,
+    category: dbCategory,
     receiptUrl: receiptUrl ?? null,
     receiptRaw: receiptRaw ?? null,
     parsedData: parsedData ?? null,
