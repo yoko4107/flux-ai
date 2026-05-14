@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 04-custom-expense-categories 04-01-backend-PLAN.md
-last_updated: "2026-05-14T03:23:05.316Z"
+stopped_at: Completed 04-custom-expense-categories 04-02-admin-ui-PLAN.md
+last_updated: "2026-05-14T03:36:40.334Z"
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # PROJECT STATE: System Configuration — Cost Center Admin Panel
@@ -35,16 +35,16 @@ Admins can configure all reimbursement rules per cost center without technical s
 
 ## Current Position
 
-**Phase:** Phase 4 — Custom Expense Categories (1/2 plans complete)  
+**Phase:** Phase 4 — Custom Expense Categories (2/2 plans complete)  
 **Milestone:** System Configuration v1  
-**Progress:** [█████████░] 88%
+**Progress:** [██████████] 100%
 
 ```
 Roadmap: ████████████████████████ 100% (structure complete)
 Phase 1:  ████████████████████████ 100% (2/2 plans done)
 Phase 2:  ████████████████████████ 100% (2/2 plans done)
 Phase 3:  ████████████████████████ 100% (2/2 plans done)
-Phase 4:  ████████████░░░░░░░░░░░░  50% (1/2 plans done)
+Phase 4:  ████████████████████████ 100% (2/2 plans done)
 ```
 
 ---
@@ -56,7 +56,7 @@ Phase 4:  ████████████░░░░░░░░░░░�
 | 1 | Foundation | 4 | Complete (2/2 plans) | 2 |
 | 2 | Approval Workflows | 7 | Complete (2/2 plans) | 2 |
 | 3 | Per-CC Policies & Deadlines | 10 | Complete (2/2 plans) | 2 |
-| 4 | Expense Categories | 6 | In progress (1/2 plans) | 2 |
+| 4 | Expense Categories | 6 | Complete (2/2 plans) | 2 |
 | 5 | Role Management | 6 | Not started | 1 |
 | 6 | Regional Rules | 5 | Not started | 1 |
 | 7 | Deadlines | 5 | Not started | 1 |
@@ -94,6 +94,9 @@ Phase 4:  ████████████░░░░░░░░░░░�
 | DEFAULT_CATEGORY_CODES constant avoids Prisma runtime import for testability | Locked | ✓ Pure helper testable without DB |
 | v1: custom category codes stored as Category.OTHER in DB (no Prisma schema changes) | Locked | ✓ Free-text/JSON approach, user-mandated |
 | allCategories field in public config = merged defaults + enabled custom codes | Locked | ✓ Employee form reads single ready-to-use list |
+| CATEGORIES constant moved to module scope — shared by AddCustomCategoryRow via existingCodes prop | Locked | ✓ Avoids hook rules violation, enables code reuse |
+| AddCustomCategoryRow placed above AdminConfigPage as standalone component | Locked | ✓ Prevents re-creation on parent re-render |
+| No maxAmount UI field for custom categories in v1 (CATG-05 deferred) | Locked | ✓ Reduces scope, v2 addition |
 
 ---
 
@@ -144,7 +147,7 @@ Phase 4:  ████████████░░░░░░░░░░░�
 
 **Last Updated:** 2026-05-13 (Plan 03-01 execution)  
 **Last Editor:** Claude (executor)  
-**Stopped At:** Completed 04-custom-expense-categories 04-01-backend-PLAN.md
+**Stopped At:** Completed 04-custom-expense-categories 04-02-admin-ui-PLAN.md
 **Branch:** claude/dreamy-jones-22d72f  
 **Mode:** yolo (with plan_check, verifier, nyquist_validation workflows enabled)
 
