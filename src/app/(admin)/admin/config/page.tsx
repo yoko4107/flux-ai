@@ -324,6 +324,64 @@ function RoleAssignmentsCard({
   )
 }
 
+const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "ACCOMMODATION", "COMMUNICATION", "TRAINING", "ENTERTAINMENT", "MEETING", "EQUIPMENT", "PRINTING", "SOFTWARE", "OTHER"] as const
+
+function AddCustomCategoryRow({
+  existingCodes,
+  onAdd,
+}: {
+  existingCodes: readonly string[]
+  onAdd: (cat: CustomCategory) => void
+}) {
+  const [name, setName] = useState("")
+  const [code, setCode] = useState("")
+  const [error, setError] = useState<string | null>(null)
+
+  function handleAdd() {
+    const trimmedName = name.trim()
+    const trimmedCode = code.trim().toUpperCase()
+    if (!trimmedName) { setError("Name is required"); return }
+    if (!trimmedCode || !/^[A-Z0-9_]+$/.test(trimmedCode)) {
+      setError("Code must be uppercase letters, digits, and underscores only")
+      return
+    }
+    if (trimmedCode.length > 30) { setError("Code too long (max 30 chars)"); return }
+    if (existingCodes.includes(trimmedCode)) {
+      setError(`Code "${trimmedCode}" already exists`)
+      return
+    }
+    setError(null)
+    onAdd({ name: trimmedName, code: trimmedCode, enabled: true })
+    setName("")
+    setCode("")
+  }
+
+  return (
+    <div className="space-y-1 pt-2 border-t">
+      <div className="flex gap-2">
+        <Input
+          placeholder="Name (e.g. Conference Fees)"
+          value={name}
+          onChange={(e) => { setName(e.target.value); setError(null) }}
+          maxLength={60}
+          className="flex-1 h-8 text-sm"
+        />
+        <Input
+          placeholder="Code (e.g. CONF_FEES)"
+          value={code}
+          onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null) }}
+          maxLength={30}
+          className="w-36 h-8 text-sm font-mono"
+        />
+        <Button size="sm" variant="outline" className="h-8" onClick={handleAdd}>
+          Add
+        </Button>
+      </div>
+      {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  )
+}
+
 export default function AdminConfigPage() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<UserOption[]>([])
@@ -631,8 +689,6 @@ export default function AdminConfigPage() {
   if (loading) {
     return <div className="text-center py-12 text-gray-500">Loading configuration...</div>
   }
-
-  const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "ACCOMMODATION", "COMMUNICATION", "TRAINING", "ENTERTAINMENT", "MEETING", "EQUIPMENT", "PRINTING", "SOFTWARE", "OTHER"] as const
 
   const financeUsers = users.filter((u) => u.role === "FINANCE")
 
@@ -978,6 +1034,74 @@ export default function AdminConfigPage() {
             </label>
           ))}
         </div>
+      </SectionCard>
+
+      {/* 9. Custom Categories */}
+      <SectionCard
+        title="Custom Categories"
+        metaKey="customCategories"
+        meta={meta}
+        onSave={handleSaveCustomCategories}
+        saving={savingCustomCategories}
+      >
+        <p className="text-xs text-gray-500">
+          Add categories beyond the 12 defaults. Custom codes must be uppercase letters, digits, and underscores (e.g. CONF_FEES).
+        </p>
+
+        {/* Existing custom category rows */}
+        {customCategories.length === 0 ? (
+          <p className="text-sm text-gray-400 italic">No custom categories yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {customCategories.map((cat, idx) => (
+              <li key={cat.code} className="flex items-center gap-2 rounded-md border px-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={cat.enabled}
+                  onChange={(e) =>
+                    setCustomCategories((prev) =>
+                      prev.map((c, i) => i === idx ? { ...c, enabled: e.target.checked } : c)
+                    )
+                  }
+                  title="Enable/disable"
+                />
+                <input
+                  type="text"
+                  value={cat.name}
+                  onChange={(e) =>
+                    setCustomCategories((prev) =>
+                      prev.map((c, i) => i === idx ? { ...c, name: e.target.value } : c)
+                    )
+                  }
+                  maxLength={60}
+                  className="flex-1 text-sm border-0 bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-300 rounded px-1"
+                  placeholder="Category name"
+                />
+                <span className="text-xs text-gray-400 font-mono">{cat.code}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+                  onClick={() =>
+                    setCustomCategories((prev) => prev.filter((_, i) => i !== idx))
+                  }
+                  title="Remove"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Add new category form */}
+        <AddCustomCategoryRow
+          existingCodes={[
+            ...CATEGORIES,
+            ...customCategories.map((c) => c.code),
+          ]}
+          onAdd={(cat) => setCustomCategories((prev) => [...prev, cat])}
+        />
       </SectionCard>
 
       {/* 6. Notification Channels */}
