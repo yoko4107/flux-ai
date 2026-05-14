@@ -28,11 +28,18 @@ export async function GET(req: NextRequest) {
   const actionParam = params.get("action")
   const fromDate = params.get("from")
   const toDate = params.get("to_date")
+  const costCenterId = params.get("costCenterId")
 
   const where: Prisma.LeaveEmailEventWhereInput = {}
 
   if (session.user.role === "ADMIN" && session.user.organizationId) {
     where.leaveRequest = { organizationId: session.user.organizationId }
+  }
+  if (costCenterId) {
+    where.leaveRequest = {
+      ...(where.leaveRequest as object ?? {}),
+      employee: { costCenterId },
+    }
   }
 
   if (typeParam) {

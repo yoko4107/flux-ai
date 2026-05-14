@@ -1,10 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Loader2, Search, Trash2, ChevronDown, ChevronRight,
-  Save, Calculator, FilePlus2,
+  Save, Calculator, FilePlus2, Upload, X, FileUp, Link2,
 } from "lucide-react"
 
 type CostCenter = {
@@ -55,6 +55,7 @@ export function EmployeesSection({ costCenter }: { costCenter: CostCenter }) {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [showImport, setShowImport] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -112,16 +113,33 @@ export function EmployeesSection({ costCenter }: { costCenter: CostCenter }) {
 
   return (
     <div className="space-y-3">
-      {/* Search */}
-      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-        <Search className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-        <input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter by name or email…"
-          className="flex-1 border-none bg-transparent text-sm outline-none placeholder:text-gray-400"
+      {showImport && (
+        <BulkSalaryImportModal
+          costCenter={costCenter}
+          onClose={() => setShowImport(false)}
+          onDone={() => { setShowImport(false); load() }}
         />
-        <span className="text-xs text-gray-400">{filtered.length} employees</span>
+      )}
+
+      {/* Search + Import */}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
+          <Search className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by name or email…"
+            className="flex-1 border-none bg-transparent text-sm outline-none placeholder:text-gray-400"
+          />
+          <span className="text-xs text-gray-400">{filtered.length} employees</span>
+        </div>
+        <button
+          onClick={() => setShowImport(true)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Import salaries
+        </button>
       </div>
 
       {/* Employee list */}
@@ -182,7 +200,8 @@ function PayrollPanel({ user, costCenter }: { user: User; costCenter: CostCenter
   const [comp, setComp] = useState<Compensation | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [period, setPeriod] = useState<string>(() => new Date().toISOString().slice(0, 7))
+  const [period, setPeriod] = useState<string>("")
+  useEffect(() => { setPeriod(new Date().toISOString().slice(0, 7)) }, [])
   const [paidDays, setPaidDays] = useState("")
   const [workingDays, setWorkingDays] = useState("")
   const [preview, setPreview] = useState<CalcPreview | null>(null)
@@ -551,6 +570,312 @@ function ComponentOverrides({
           className="w-28 rounded border border-gray-300 px-2 py-1 text-xs tabular-nums"
         />
         <button onClick={add} className="rounded bg-[#0B1E3F] px-3 py-1 text-xs font-medium text-white">Add</button>
+      </div>
+    </div>
+  )
+}
+
+type ImportRow = {
+  email: string
+  baseSalary: number
+  currency: string
+  workingDaysPerMonth: number
+  startedAt: string
+}
+
+type ImportResult = { email: string; status: "ok" | "skipped"; reason?: string }
+
+function parseSalaryCSVClient(text: string, defaultCurrency: string): ImportRow[] {
+  const today = new Date().toISOString().slice(0, 10)
+  const lines = text.trim().split(/\r?\n/).filter(Boolean)
+  if (lines.length === 0) return []
+  const firstLine = lines[0].toLowerCase()
+  const startIdx = firstLine.includes("email") || firstLine.includes("salary") ? 1 : 0
+  const results: ImportRow[] = []
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line || line.startsWith("#")) continue
+    const cols = line.split(",").map((s) => s.trim().replace(/^["']|["']$/g, ""))
+    const emailIdx = cols.findIndex((c) => c.includes("@"))
+    if (emailIdx === -1) continue
+    const email = cols[emailIdx]
+    let baseSalary = NaN
+    let currency = defaultCurrency
+    let workingDaysPerMonth = 22
+    let startedAt = today
+    for (let j = 0; j < cols.length; j++) {
+      if (j === emailIdx) continue
+      const val = cols[j]
+      if (!val) continue
+      const num = Number(val.replace(/[,_]/g, ""))
+      if (!isNaN(num) && isNaN(baseSalary) && num > 0) { baseSalary = num; continue }
+      if (/^[A-Z]{3}$/i.test(val) && val.length === 3) { currency = val.toUpperCase(); continue }
+      if (/^\d{4}-\d{2}-\d{2}/.test(val)) { startedAt = val.slice(0, 10); continue }
+      const days = parseInt(val, 10)
+      if (!isNaN(days) && days >= 1 && days <= 31 && !isNaN(baseSalary)) { workingDaysPerMonth = days; continue }
+    }
+    if (!email || isNaN(baseSalary) || baseSalary <= 0) continue
+    results.push({ email, baseSalary, currency, workingDaysPerMonth, startedAt })
+  }
+  return results
+}
+
+function BulkSalaryImportModal({
+  costCenter,
+  onClose,
+  onDone,
+}: {
+  costCenter: CostCenter
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [tab, setTab] = useState<"sheets" | "csv">("sheets")
+  const [sheetsUrl, setSheetsUrl] = useState("")
+  const [csvText, setCsvText] = useState("")
+  const [preview, setPreview] = useState<ImportRow[] | null>(null)
+  const [busy, setBusy] = useState<"preview" | "apply" | null>(null)
+  const [results, setResults] = useState<{ saved: number; skipped: number; rows: ImportResult[] } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => setCsvText(ev.target?.result as string ?? "")
+    reader.readAsText(file)
+  }
+
+  function buildPreview() {
+    setError(null)
+    if (tab === "sheets") {
+      if (!sheetsUrl.trim()) { setError("Paste a Google Sheets URL first."); return }
+    } else {
+      if (!csvText.trim()) { setError("No CSV content — paste text or upload a file."); return }
+    }
+    if (tab === "csv") {
+      const rows = parseSalaryCSVClient(csvText, costCenter.currency)
+      if (rows.length === 0) {
+        setError("No valid rows found. Expected columns: email, baseSalary, and optionally currency, workingDaysPerMonth, startedAt.")
+        return
+      }
+      setPreview(rows)
+    } else {
+      setBusy("preview")
+      fetch("/api/payroll/admin/compensation/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "sheets", url: sheetsUrl.trim(), costCenterId: costCenter.id, defaultCurrency: costCenter.currency }),
+      })
+        .then((r) => r.json())
+        .then((j) => {
+          if (j.error) { setError(j.error); return }
+          // Sheets mode returns saved/skipped directly — re-parse for preview
+          setError("Use the preview step: paste the URL then click Preview.")
+        })
+        .catch((e) => setError(e.message))
+        .finally(() => setBusy(null))
+
+      // For sheets, fetch CSV client-side to show preview before applying
+      const match = sheetsUrl.match(/\/spreadsheets\/d\/([^/]+)/)
+      if (!match) { setError("Invalid Google Sheets URL."); setBusy(null); return }
+      const sheetId = match[1]
+      const gidMatch = sheetsUrl.match(/[#&?]gid=(\d+)/)
+      const gid = gidMatch ? gidMatch[1] : "0"
+      const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`
+      setBusy("preview")
+      setError(null)
+      fetch(exportUrl)
+        .then((r) => {
+          if (!r.ok) throw new Error(`Could not fetch sheet (HTTP ${r.status}). Make sure it is shared publicly.`)
+          return r.text()
+        })
+        .then((text) => {
+          const rows = parseSalaryCSVClient(text, costCenter.currency)
+          if (rows.length === 0) throw new Error("No valid salary rows found. Expected columns: email, baseSalary.")
+          setPreview(rows)
+        })
+        .catch((e) => setError(e.message))
+        .finally(() => setBusy(null))
+    }
+  }
+
+  async function apply() {
+    if (!preview) return
+    setBusy("apply")
+    setError(null)
+    try {
+      const res = await fetch("/api/payroll/admin/compensation/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "rows", rows: preview, costCenterId: costCenter.id }),
+      })
+      const j = await res.json()
+      if (!res.ok) { setError(j.error ?? "Apply failed"); return }
+      setResults({ saved: j.saved, skipped: j.skipped, rows: j.results })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const EXAMPLE = `email,baseSalary,currency,workingDaysPerMonth,startedAt
+yoko@ringkas.homes,10000000,IDR,22,2025-01-01
+john@ringkas.homes,8500000,IDR,22,2025-01-01`
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Bulk import salaries</h2>
+            <p className="text-xs text-gray-500 mt-0.5">For cost center: {costCenter.name}</p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-gray-400 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {!results ? (
+            <>
+              {/* Source tabs */}
+              <div className="flex gap-3 border-b border-gray-200">
+                {(["sheets", "csv"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { setTab(t); setPreview(null); setError(null) }}
+                    className={`flex items-center gap-1.5 pb-2.5 text-xs font-medium border-b-2 transition-colors ${
+                      tab === t ? "border-blue-700 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    {t === "sheets" ? <><Link2 className="h-3.5 w-3.5" /> Google Sheets</> : <><FileUp className="h-3.5 w-3.5" /> CSV file / paste</>}
+                  </button>
+                ))}
+              </div>
+
+              {tab === "sheets" ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-700">Google Sheets URL</label>
+                  <input
+                    value={sheetsUrl}
+                    onChange={(e) => { setSheetsUrl(e.target.value); setPreview(null) }}
+                    placeholder="https://docs.google.com/spreadsheets/d/…"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                  <p className="text-[11px] text-gray-400">Sheet must be shared as "Anyone with the link can view". Columns: email, baseSalary, currency (optional), workingDaysPerMonth (optional), startedAt (optional).</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="block text-xs font-medium text-gray-700">CSV content</label>
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      className="text-[11px] text-blue-700 hover:underline"
+                    >Upload file</button>
+                    <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
+                  </div>
+                  <textarea
+                    value={csvText}
+                    onChange={(e) => { setCsvText(e.target.value); setPreview(null) }}
+                    placeholder={EXAMPLE}
+                    rows={5}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+
+              {error && (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+              )}
+
+              {!preview ? (
+                <button
+                  onClick={buildPreview}
+                  disabled={busy !== null}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-medium hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {busy === "preview" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                  Preview rows
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-gray-700">{preview.length} row{preview.length !== 1 ? "s" : ""} ready to import</p>
+                  <div className="max-h-52 overflow-y-auto rounded-lg border border-gray-200">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-gray-50">
+                        <tr>
+                          {["Email", "Base salary", "Currency", "Working days", "Started"].map((h) => (
+                            <th key={h} className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {preview.map((row, i) => (
+                          <tr key={i} className="hover:bg-gray-50/50">
+                            <td className="px-3 py-1.5 text-gray-700">{row.email}</td>
+                            <td className="px-3 py-1.5 tabular-nums text-gray-900">{row.baseSalary.toLocaleString()}</td>
+                            <td className="px-3 py-1.5 font-mono text-gray-700">{row.currency}</td>
+                            <td className="px-3 py-1.5 tabular-nums text-gray-700">{row.workingDaysPerMonth}</td>
+                            <td className="px-3 py-1.5 text-gray-700">{row.startedAt}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={apply}
+                      disabled={busy !== null}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-4 py-2 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {busy === "apply" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                      Apply {preview.length} salaries
+                    </button>
+                    <button
+                      onClick={() => setPreview(null)}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Results */
+            <div className="space-y-3">
+              <div className="flex gap-4">
+                <div className="rounded-lg border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-800">{results.saved}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">Saved</p>
+                </div>
+                <div className="rounded-lg border-2 border-amber-200 bg-amber-50 px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-amber-800">{results.skipped}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Skipped</p>
+                </div>
+              </div>
+              {results.rows.some((r) => r.status === "skipped") && (
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-200">
+                  {results.rows.filter((r) => r.status === "skipped").map((r, i) => (
+                    <div key={i} className="flex items-start gap-2 border-b border-gray-100 px-3 py-2 text-xs last:border-0">
+                      <span className="font-medium text-gray-700">{r.email}</span>
+                      <span className="text-amber-700">{r.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={onDone}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-4 py-2 text-xs font-medium text-white"
+              >
+                Done
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
