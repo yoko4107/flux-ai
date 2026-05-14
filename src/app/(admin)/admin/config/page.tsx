@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import { ChevronUp, ChevronDown, X, UserPlus, ShieldCheck, Banknote, Building2 } from "lucide-react"
 import { CostCenterSelector, type CostCenter } from "@/components/admin/CostCenterSelector"
 import { derivePreviewSteps } from "@/lib/workflow-preview-helpers"
+import type { CustomCategory } from "@/lib/custom-categories"
 
 // Types
 interface UserOption {
@@ -385,6 +386,10 @@ export default function AdminConfigPage() {
   const [resubmitBehavior, setResubmitBehavior] = useState<"reset" | "continue">("reset")
   const [savingResubmit, setSavingResubmit] = useState(false)
 
+  // Custom Categories
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([])
+  const [savingCustomCategories, setSavingCustomCategories] = useState(false)
+
   // Load cost centers once on mount
   useEffect(() => {
     async function loadCostCenters() {
@@ -464,6 +469,11 @@ export default function AdminConfigPage() {
         }
         if (c.resubmitBehavior) {
           setResubmitBehavior(c.resubmitBehavior as "reset" | "continue")
+        }
+        if (Array.isArray(c.customCategories)) {
+          setCustomCategories(c.customCategories as CustomCategory[])
+        } else {
+          setCustomCategories([])
         }
       }
 
@@ -608,6 +618,14 @@ export default function AdminConfigPage() {
     if (ok) toast.success("Resubmit behavior saved")
     else toast.error("Failed to save resubmit behavior")
     setSavingResubmit(false)
+  }
+
+  async function handleSaveCustomCategories() {
+    setSavingCustomCategories(true)
+    const ok = await saveConfig("customCategories", customCategories, selectedCC?.id ?? null)
+    if (ok) toast.success("Custom categories saved")
+    else toast.error("Failed to save custom categories")
+    setSavingCustomCategories(false)
   }
 
   if (loading) {
