@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   const invitation = await prisma.userInvitation.findUnique({
     where: { token },
-    include: { organization: true },
+    include: { organization: true, costCenter: true },
   })
 
   if (!invitation || invitation.status !== "PENDING" || invitation.expiresAt < new Date()) {
@@ -38,6 +38,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       name: invitation.email.split("@")[0],
       role: invitation.role,
       organizationId: invitation.orgId ?? null,
+      costCenterId: invitation.costCenterId ?? null,
       status: "ACTIVE",
       nationalIdUrl: nationalIdUrl ?? null,
       selfieUrl: selfieUrl ?? null,

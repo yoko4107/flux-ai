@@ -230,6 +230,7 @@ model CostCenter {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   users          User[]   @relation("UserCostCenter")
+  invitations    UserInvitation[] @relation("InvitationCostCenter")
   payrollRules   CountryPayrollRule[] @relation("CostCenterPayrollRules")
   compensations  EmployeeCompensation[] @relation("CostCenterCompensations")
   payslips       Payslip[] @relation("CostCenterPayslips")
@@ -409,6 +410,7 @@ model UserInvitation {
   phone       String?
   role        Role         @default(EMPLOYEE)
   orgId       String?
+  costCenterId String?
   token       String       @unique @default(cuid())
   otp         String?
   otpExpiresAt DateTime?
@@ -419,6 +421,7 @@ model UserInvitation {
   invitedById String
   invitedBy   User         @relation("InvitedBy", fields: [invitedById], references: [id])
   organization Organization? @relation(fields: [orgId], references: [id])
+  costCenter   CostCenter?  @relation("InvitationCostCenter", fields: [costCenterId], references: [id], onDelete: SetNull)
 }
 
 // ---------------------------------------------------------------------------

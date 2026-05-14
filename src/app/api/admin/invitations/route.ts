@@ -15,6 +15,7 @@ export async function GET() {
     include: {
       invitedBy: { select: { name: true, email: true } },
       organization: { select: { name: true } },
+      costCenter: { select: { name: true, code: true } },
     },
     orderBy: { sentAt: "desc" },
   })

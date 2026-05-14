@@ -131,12 +131,6 @@ const navItems: NavItem[] = [
     roles: ["ADMIN"],
   },
   {
-    title: "Per Diem",
-    href: "/admin/per-diem",
-    icon: <Wallet className="h-4 w-4" />,
-    roles: ["ADMIN"],
-  },
-  {
     title: "Payroll",
     href: "/admin/payroll",
     icon: <Banknote className="h-4 w-4" />,

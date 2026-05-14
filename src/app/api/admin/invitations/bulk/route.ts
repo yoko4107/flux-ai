@@ -12,6 +12,7 @@ const inviteRowSchema = z.object({
 const bulkSchema = z.object({
   invites: z.array(inviteRowSchema).min(1).max(200),
   orgId: z.string().optional(),
+  costCenterId: z.string().optional(),
 })
 
 export async function POST(request: Request) {
@@ -27,9 +28,16 @@ export async function POST(request: Request) {
   const parsed = bulkSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: "Invalid input", details: parsed.error.issues }, { status: 400 })
 
-  const { invites, orgId } = parsed.data
+  const { invites, orgId, costCenterId } = parsed.data
   const isSuperAdmin = session.user.role === "SUPER_ADMIN"
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+
+  // Get admin's cost center as fallback
+  const adminUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { costCenterId: true },
+  })
+  const effectiveCostCenterId = costCenterId ?? adminUser?.costCenterId ?? null
 
   const results = []
   for (const invite of invites) {
@@ -52,6 +60,7 @@ export async function POST(request: Request) {
         phone: invite.phone,
         role: invite.role,
         orgId: effectiveOrgId,
+        costCenterId: effectiveCostCenterId,
         invitedById: session.user.id,
         expiresAt,
       },

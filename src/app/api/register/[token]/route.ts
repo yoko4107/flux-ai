@@ -5,7 +5,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const { token } = await params
   const invitation = await prisma.userInvitation.findUnique({
     where: { token },
-    include: { organization: { select: { name: true, slug: true } } },
+    include: {
+      organization: { select: { name: true, slug: true } },
+      costCenter: { select: { name: true, code: true } },
+    },
   })
 
   if (!invitation) return NextResponse.json({ error: "Invalid invitation link" }, { status: 404 })
@@ -19,5 +22,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     phone: invitation.phone,
     role: invitation.role,
     orgName: invitation.organization?.name ?? null,
+    costCenterName: invitation.costCenter?.name ?? null,
   })
 }
