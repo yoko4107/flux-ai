@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 04-custom-expense-categories 04-02-admin-ui-PLAN.md
-last_updated: "2026-05-14T03:41:43.155Z"
+stopped_at: Completed 05-validation-polish 05-01-validation-polish-PLAN.md
+last_updated: "2026-05-14T11:10:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 4
@@ -35,7 +35,7 @@ Admins can configure all reimbursement rules per cost center without technical s
 
 ## Current Position
 
-**Phase:** Phase 4 — Custom Expense Categories (2/2 plans complete)  
+**Phase:** Phase 5 — Validation & Polish (1/1 plans complete)  
 **Milestone:** System Configuration v1  
 **Progress:** [██████████] 100%
 
@@ -45,6 +45,7 @@ Phase 1:  ███████████████████████�
 Phase 2:  ████████████████████████ 100% (2/2 plans done)
 Phase 3:  ████████████████████████ 100% (2/2 plans done)
 Phase 4:  ████████████████████████ 100% (2/2 plans done)
+Phase 5:  ████████████████████████ 100% (1/1 plans done)
 ```
 
 ---
@@ -57,7 +58,7 @@ Phase 4:  ███████████████████████�
 | 2 | Approval Workflows | 7 | Complete (2/2 plans) | 2 |
 | 3 | Per-CC Policies & Deadlines | 10 | Complete (2/2 plans) | 2 |
 | 4 | Expense Categories | 6 | Complete (2/2 plans) | 2 |
-| 5 | Role Management | 6 | Not started | 1 |
+| 5 | Validation & Polish | 5 | Complete (1/1 plans) | 1 |
 | 6 | Regional Rules | 5 | Not started | 1 |
 | 7 | Deadlines | 5 | Not started | 1 |
 | 8 | Currency & Finalization | 15 | Not started | 1 |
@@ -97,6 +98,10 @@ Phase 4:  ███████████████████████�
 | CATEGORIES constant moved to module scope — shared by AddCustomCategoryRow via existingCodes prop | Locked | ✓ Avoids hook rules violation, enables code reuse |
 | AddCustomCategoryRow placed above AdminConfigPage as standalone component | Locked | ✓ Prevents re-creation on parent re-render |
 | No maxAmount UI field for custom categories in v1 (CATG-05 deferred) | Locked | ✓ Reduces scope, v2 addition |
+| Set<string> dirtyKeys for per-section markClean tracking | Locked | ✓ Avoids clearing unrelated dirty sections on partial save |
+| savedRef snapshot keyed to state variable names for symmetrical discard | Locked | ✓ handleDiscardAll iterates savedRef.current without separate mapping |
+| committeeError inline <p> (not toast) so error persists visibly | Locked | ✓ Per CONF-04 spec requirement |
+| ENFC-01: approve route correct for both modes — no code changes | Locked | ✓ Verified 2026-05-14; parallel all-must-approve gate confirmed |
 
 ---
 
@@ -145,9 +150,9 @@ Phase 4:  ███████████████████████�
 
 ## Session Continuity
 
-**Last Updated:** 2026-05-13 (Plan 03-01 execution)  
+**Last Updated:** 2026-05-14 (Plan 05-01 execution)  
 **Last Editor:** Claude (executor)  
-**Stopped At:** Completed 04-custom-expense-categories 04-02-admin-ui-PLAN.md
+**Stopped At:** Completed 05-validation-polish 05-01-validation-polish-PLAN.md
 **Branch:** claude/dreamy-jones-22d72f  
 **Mode:** yolo (with plan_check, verifier, nyquist_validation workflows enabled)
 
