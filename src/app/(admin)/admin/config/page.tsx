@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -122,9 +122,8 @@ function WorkflowPreviewCard({
                 steps.map((step, idx) => {
                   const u = users.find((u) => u.id === step.id)
                   return (
-                    <>
+                    <React.Fragment key={step.id}>
                       <span
-                        key={step.id}
                         className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
                       >
                         {u?.name ?? u?.email ?? "Unknown"} (Step {idx + 1})
@@ -132,7 +131,7 @@ function WorkflowPreviewCard({
                       {idx < steps.length - 1 && (
                         <span className="text-gray-400">→</span>
                       )}
-                    </>
+                    </React.Fragment>
                   )
                 })
               ) : (
@@ -399,6 +398,7 @@ export default function AdminConfigPage() {
   })
   const [committeeAddId, setCommitteeAddId] = useState("")
   const [savingCommittee, setSavingCommittee] = useState(false)
+  const [committeeError, setCommitteeError] = useState<string | null>(null)
 
   // Finance Officer
   const [financeOfficerId, setFinanceOfficerId] = useState<string | null>(null)
@@ -447,6 +447,23 @@ export default function AdminConfigPage() {
   // Custom Categories
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([])
   const [savingCustomCategories, setSavingCustomCategories] = useState(false)
+
+  // Dirty tracking
+  const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set())
+  const savedRef = useRef<Record<string, unknown>>({})
+  const isDirty = dirtyKeys.size > 0
+
+  function markDirty(key: string) {
+    setDirtyKeys(prev => new Set(prev).add(key))
+  }
+
+  function markClean(...keys: string[]) {
+    setDirtyKeys(prev => {
+      const next = new Set(prev)
+      keys.forEach(k => next.delete(k))
+      return next
+    })
+  }
 
   // Load cost centers once on mount
   useEffect(() => {
@@ -533,6 +550,35 @@ export default function AdminConfigPage() {
         } else {
           setCustomCategories([])
         }
+
+        // Snapshot the just-loaded values so handleDiscardAll can restore them
+        savedRef.current = {
+          committee: {
+            mode: (c.approvalCommittee as Record<string, unknown>)?.mode ?? "sequential",
+            approvers: (() => {
+              const raw = c.approvalCommittee as Record<string, unknown> | undefined
+              if (!raw) return []
+              if (Array.isArray(raw.approvers)) return raw.approvers as string[]
+              if (Array.isArray((raw as Record<string, unknown>).members))
+                return ((raw as Record<string, unknown>).members as { userId: string }[]).map(m => m.userId)
+              return []
+            })(),
+          },
+          financeOfficerId: (c.financeOfficer as { userId?: string })?.userId ?? null,
+          submissionDeadline: typeof c.submissionDeadline === "number" ? c.submissionDeadline : 25,
+          approvalDeadline: typeof c.approvalDeadline === "number" ? c.approvalDeadline : 5,
+          paymentDeadline: typeof c.paymentDeadline === "number" ? c.paymentDeadline : 5,
+          maxAmounts: (c.maxAmountPerCategory as Record<string, number>) ?? { TRAVEL: 5000, MEALS: 500, SUPPLIES: 1000, OTHER: 2000 },
+          requireReceiptAbove: typeof c.requireReceiptAbove === "number" ? c.requireReceiptAbove : 50,
+          maxAmountPerRequest: typeof c.maxAmountPerRequest === "number" ? c.maxAmountPerRequest : 0,
+          approvalThreshold: typeof c.approvalThreshold === "number" ? c.approvalThreshold : 0,
+          allowedCategories: Array.isArray(c.allowedCategories) ? c.allowedCategories as string[] : ["TRAVEL", "MEALS", "SUPPLIES", "OTHER"],
+          notifChannels: (c.notificationChannels as NotificationChannels) ?? { email: true, whatsapp: false, inApp: true },
+          resubmitBehavior: (c.resubmitBehavior as "reset" | "continue") ?? "reset",
+          customCategories: Array.isArray(c.customCategories) ? c.customCategories as CustomCategory[] : [],
+        }
+        // Clear dirty state on CC switch/reload — loadData resets all state
+        setDirtyKeys(new Set())
       }
 
       if (usersRes.ok) {
@@ -552,6 +598,35 @@ export default function AdminConfigPage() {
       loadData(selectedCC?.id ?? null)
     }
   }, [selectedCC?.id, loadData])
+
+  // Prevent accidental navigation when there are unsaved changes
+  useEffect(() => {
+    if (!isDirty) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", handler)
+    return () => window.removeEventListener("beforeunload", handler)
+  }, [isDirty])
+
+  function handleDiscardAll() {
+    const s = savedRef.current
+    if (s.committee) setCommittee(s.committee as ApprovalCommittee)
+    if (s.financeOfficerId !== undefined) setFinanceOfficerId(s.financeOfficerId as string | null)
+    if (typeof s.submissionDeadline === "number") setSubmissionDeadline(s.submissionDeadline)
+    if (typeof s.approvalDeadline === "number") setApprovalDeadline(s.approvalDeadline)
+    if (typeof s.paymentDeadline === "number") setPaymentDeadline(s.paymentDeadline)
+    if (s.maxAmounts) setMaxAmounts(s.maxAmounts as Record<string, number>)
+    if (typeof s.requireReceiptAbove === "number") setRequireReceiptAbove(s.requireReceiptAbove)
+    if (typeof s.maxAmountPerRequest === "number") setMaxAmountPerRequest(s.maxAmountPerRequest)
+    if (typeof s.approvalThreshold === "number") setApprovalThreshold(s.approvalThreshold)
+    if (Array.isArray(s.allowedCategories)) setAllowedCategories(s.allowedCategories as string[])
+    if (s.notifChannels) setNotifChannels(s.notifChannels as NotificationChannels)
+    if (s.resubmitBehavior) setResubmitBehavior(s.resubmitBehavior as "reset" | "continue")
+    if (Array.isArray(s.customCategories)) setCustomCategories(s.customCategories as CustomCategory[])
+    setDirtyKeys(new Set())
+  }
 
   async function saveConfig(key: string, value: unknown, costCenterId: string | null): Promise<boolean> {
     const res = await fetch("/api/admin/config", {
@@ -585,24 +660,38 @@ export default function AdminConfigPage() {
     const swapIdx = direction === "up" ? index - 1 : index + 1
     if (swapIdx < 0 || swapIdx >= newApprovers.length) return
     ;[newApprovers[index], newApprovers[swapIdx]] = [newApprovers[swapIdx], newApprovers[index]]
+    markDirty("approvalCommittee")
     setCommittee((prev) => ({ ...prev, approvers: newApprovers }))
   }
 
   function removeApprover(id: string) {
+    markDirty("approvalCommittee")
     setCommittee((prev) => ({ ...prev, approvers: prev.approvers.filter((a) => a !== id) }))
   }
 
   function addApprover() {
     if (!committeeAddId) return
+    markDirty("approvalCommittee")
     setCommittee((prev) => ({ ...prev, approvers: [...prev.approvers, committeeAddId] }))
     setCommitteeAddId("")
+    setCommitteeError(null)
   }
 
   async function handleSaveCommittee() {
+    if (committee.approvers.length === 0) {
+      setCommitteeError("Approval committee must have at least one approver. Set an approval threshold to auto-approve low amounts instead.")
+      return
+    }
+    setCommitteeError(null)
     setSavingCommittee(true)
     const ok = await saveConfig("approvalCommittee", committee, selectedCC?.id ?? null)
-    if (ok) toast.success("Approval committee saved")
-    else toast.error("Failed to save approval committee")
+    if (ok) {
+      toast.success("Approval committee saved")
+      markClean("approvalCommittee")
+      savedRef.current = { ...savedRef.current, committee }
+    } else {
+      toast.error("Failed to save approval committee")
+    }
     setSavingCommittee(false)
   }
 
@@ -610,8 +699,13 @@ export default function AdminConfigPage() {
     setSavingFO(true)
     const value = financeOfficerId ? { userId: financeOfficerId } : null
     const ok = await saveConfig("financeOfficer", value, selectedCC?.id ?? null)
-    if (ok) toast.success("Finance Officer saved")
-    else toast.error("Failed to save Finance Officer")
+    if (ok) {
+      toast.success("Finance Officer saved")
+      markClean("financeOfficer")
+      savedRef.current = { ...savedRef.current, financeOfficerId }
+    } else {
+      toast.error("Failed to save Finance Officer")
+    }
     setSavingFO(false)
   }
 
@@ -622,24 +716,39 @@ export default function AdminConfigPage() {
       saveConfig("approvalDeadline", approvalDeadline, selectedCC?.id ?? null),
       saveConfig("paymentDeadline", paymentDeadline, selectedCC?.id ?? null),
     ])
-    if (ok1 && ok2 && ok3) toast.success("Deadlines saved")
-    else toast.error("Failed to save deadlines")
+    if (ok1 && ok2 && ok3) {
+      toast.success("Deadlines saved")
+      markClean("submissionDeadline", "approvalDeadline", "paymentDeadline")
+      savedRef.current = { ...savedRef.current, submissionDeadline, approvalDeadline, paymentDeadline }
+    } else {
+      toast.error("Failed to save deadlines")
+    }
     setSavingDeadlines(false)
   }
 
   async function handleSaveMaxAmounts() {
     setSavingMaxAmounts(true)
     const ok = await saveConfig("maxAmountPerCategory", maxAmounts, selectedCC?.id ?? null)
-    if (ok) toast.success("Category limits saved")
-    else toast.error("Failed to save category limits")
+    if (ok) {
+      toast.success("Category limits saved")
+      markClean("maxAmountPerCategory")
+      savedRef.current = { ...savedRef.current, maxAmounts }
+    } else {
+      toast.error("Failed to save category limits")
+    }
     setSavingMaxAmounts(false)
   }
 
   async function handleSaveReceipt() {
     setSavingReceipt(true)
     const ok = await saveConfig("requireReceiptAbove", requireReceiptAbove, selectedCC?.id ?? null)
-    if (ok) toast.success("Receipt threshold saved")
-    else toast.error("Failed to save receipt threshold")
+    if (ok) {
+      toast.success("Receipt threshold saved")
+      markClean("requireReceiptAbove")
+      savedRef.current = { ...savedRef.current, requireReceiptAbove }
+    } else {
+      toast.error("Failed to save receipt threshold")
+    }
     setSavingReceipt(false)
   }
 
@@ -649,40 +758,65 @@ export default function AdminConfigPage() {
       saveConfig("maxAmountPerRequest", maxAmountPerRequest, selectedCC?.id ?? null),
       saveConfig("approvalThreshold", approvalThreshold, selectedCC?.id ?? null),
     ])
-    if (ok1 && ok2) toast.success("Spending limits saved")
-    else toast.error("Failed to save spending limits")
+    if (ok1 && ok2) {
+      toast.success("Spending limits saved")
+      markClean("maxAmountPerRequest", "approvalThreshold")
+      savedRef.current = { ...savedRef.current, maxAmountPerRequest, approvalThreshold }
+    } else {
+      toast.error("Failed to save spending limits")
+    }
     setSavingLimits(false)
   }
 
   async function handleSaveCategories() {
     setSavingCategories(true)
     const ok = await saveConfig("allowedCategories", allowedCategories, selectedCC?.id ?? null)
-    if (ok) toast.success("Allowed categories saved")
-    else toast.error("Failed to save allowed categories")
+    if (ok) {
+      toast.success("Allowed categories saved")
+      markClean("allowedCategories")
+      savedRef.current = { ...savedRef.current, allowedCategories }
+    } else {
+      toast.error("Failed to save allowed categories")
+    }
     setSavingCategories(false)
   }
 
   async function handleSaveNotif() {
     setSavingNotif(true)
     const ok = await saveConfig("notificationChannels", notifChannels, selectedCC?.id ?? null)
-    if (ok) toast.success("Notification channels saved")
-    else toast.error("Failed to save notification channels")
+    if (ok) {
+      toast.success("Notification channels saved")
+      markClean("notificationChannels")
+      savedRef.current = { ...savedRef.current, notifChannels }
+    } else {
+      toast.error("Failed to save notification channels")
+    }
     setSavingNotif(false)
   }
 
   async function handleSaveResubmit() {
     setSavingResubmit(true)
     const ok = await saveConfig("resubmitBehavior", resubmitBehavior, selectedCC?.id ?? null)
-    if (ok) toast.success("Resubmit behavior saved")
-    else toast.error("Failed to save resubmit behavior")
+    if (ok) {
+      toast.success("Resubmit behavior saved")
+      markClean("resubmitBehavior")
+      savedRef.current = { ...savedRef.current, resubmitBehavior }
+    } else {
+      toast.error("Failed to save resubmit behavior")
+    }
     setSavingResubmit(false)
   }
 
   async function handleSaveCustomCategories() {
     setSavingCustomCategories(true)
     const ok = await saveConfig("customCategories", customCategories, selectedCC?.id ?? null)
-    if (ok) toast.success("Custom categories saved")
-    else toast.error("Failed to save custom categories")
+    if (ok) {
+      toast.success("Custom categories saved")
+      markClean("customCategories")
+      savedRef.current = { ...savedRef.current, customCategories }
+    } else {
+      toast.error("Failed to save custom categories")
+    }
     setSavingCustomCategories(false)
   }
 
@@ -717,6 +851,15 @@ export default function AdminConfigPage() {
               <span className="text-gray-400 text-xs font-normal">({selectedCC.code})</span>
             </div>
           )}
+          {/* Unsaved changes banner */}
+          {isDirty && (
+            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+              <span>You have unsaved changes.</span>
+              <Button variant="ghost" size="sm" onClick={handleDiscardAll}>
+                Discard
+              </Button>
+            </div>
+          )}
         </>
       )}
 
@@ -736,7 +879,7 @@ export default function AdminConfigPage() {
                 type="radio"
                 value="sequential"
                 checked={committee.mode === "sequential"}
-                onChange={() => setCommittee((p) => ({ ...p, mode: "sequential" }))}
+                onChange={() => { setCommittee((p) => ({ ...p, mode: "sequential" })); markDirty("approvalCommittee") }}
               />
               Sequential
             </label>
@@ -745,7 +888,7 @@ export default function AdminConfigPage() {
                 type="radio"
                 value="parallel"
                 checked={committee.mode === "parallel"}
-                onChange={() => setCommittee((p) => ({ ...p, mode: "parallel" }))}
+                onChange={() => { setCommittee((p) => ({ ...p, mode: "parallel" })); markDirty("approvalCommittee") }}
               />
               Parallel
             </label>
@@ -815,6 +958,9 @@ export default function AdminConfigPage() {
               Add
             </Button>
           </div>
+          {committeeError && (
+            <p className="text-sm text-red-500">{committeeError}</p>
+          )}
         </div>
       </SectionCard>
 
@@ -840,7 +986,7 @@ export default function AdminConfigPage() {
             <select
               id="financeOfficer"
               value={financeOfficerId ?? ""}
-              onChange={(e) => setFinanceOfficerId(e.target.value || null)}
+              onChange={(e) => { setFinanceOfficerId(e.target.value || null); markDirty("financeOfficer") }}
               className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
             >
               <option value="">None assigned</option>
@@ -879,7 +1025,7 @@ export default function AdminConfigPage() {
               min={1}
               max={31}
               value={submissionDeadline}
-              onChange={(e) => setSubmissionDeadline(Number(e.target.value))}
+              onChange={(e) => { setSubmissionDeadline(Number(e.target.value)); markDirty("submissionDeadline") }}
               className="w-full"
             />
           </div>
@@ -890,7 +1036,7 @@ export default function AdminConfigPage() {
               type="number"
               min={1}
               value={approvalDeadline}
-              onChange={(e) => setApprovalDeadline(Number(e.target.value))}
+              onChange={(e) => { setApprovalDeadline(Number(e.target.value)); markDirty("approvalDeadline") }}
               className="w-full"
             />
           </div>
@@ -902,7 +1048,7 @@ export default function AdminConfigPage() {
               min={1}
               step={1}
               value={paymentDeadline}
-              onChange={(e) => setPaymentDeadline(Number(e.target.value))}
+              onChange={(e) => { setPaymentDeadline(Number(e.target.value)); markDirty("paymentDeadline") }}
               className="w-full"
             />
             <p className="text-xs text-gray-500">Business days after approval for Finance Officer to pay</p>
@@ -937,9 +1083,10 @@ export default function AdminConfigPage() {
                       type="number"
                       min={0}
                       value={maxAmounts[cat] ?? 0}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         setMaxAmounts((prev) => ({ ...prev, [cat]: Number(e.target.value) }))
-                      }
+                        markDirty("maxAmountPerCategory")
+                      }}
                       className="w-36 h-7 text-sm"
                     />
                   </td>
@@ -965,7 +1112,7 @@ export default function AdminConfigPage() {
             type="number"
             min={0}
             value={requireReceiptAbove}
-            onChange={(e) => setRequireReceiptAbove(Number(e.target.value))}
+            onChange={(e) => { setRequireReceiptAbove(Number(e.target.value)); markDirty("requireReceiptAbove") }}
           />
         </div>
       </SectionCard>
@@ -987,7 +1134,7 @@ export default function AdminConfigPage() {
               min={0}
               step={1}
               value={maxAmountPerRequest}
-              onChange={(e) => setMaxAmountPerRequest(Number(e.target.value))}
+              onChange={(e) => { setMaxAmountPerRequest(Number(e.target.value)); markDirty("maxAmountPerRequest") }}
               className="w-full"
             />
             <p className="text-xs text-gray-500">Maximum amount per reimbursement request (0 = no limit)</p>
@@ -1000,7 +1147,7 @@ export default function AdminConfigPage() {
               min={0}
               step={1}
               value={approvalThreshold}
-              onChange={(e) => setApprovalThreshold(Number(e.target.value))}
+              onChange={(e) => { setApprovalThreshold(Number(e.target.value)); markDirty("approvalThreshold") }}
               className="w-full"
             />
             <p className="text-xs text-gray-500">Requests at or below this amount skip approvers (0 = disabled)</p>
@@ -1028,6 +1175,7 @@ export default function AdminConfigPage() {
                   } else {
                     setAllowedCategories((prev) => prev.filter((c) => c !== cat))
                   }
+                  markDirty("allowedCategories")
                 }}
               />
               <span className="text-sm capitalize">{cat.charAt(0) + cat.slice(1).toLowerCase()}</span>
@@ -1058,21 +1206,23 @@ export default function AdminConfigPage() {
                 <input
                   type="checkbox"
                   checked={cat.enabled}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setCustomCategories((prev) =>
                       prev.map((c, i) => i === idx ? { ...c, enabled: e.target.checked } : c)
                     )
-                  }
+                    markDirty("customCategories")
+                  }}
                   title="Enable/disable"
                 />
                 <input
                   type="text"
                   value={cat.name}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setCustomCategories((prev) =>
                       prev.map((c, i) => i === idx ? { ...c, name: e.target.value } : c)
                     )
-                  }
+                    markDirty("customCategories")
+                  }}
                   maxLength={60}
                   className="flex-1 text-sm border-0 bg-transparent focus:outline-none focus:ring-1 focus:ring-blue-300 rounded px-1"
                   placeholder="Category name"
@@ -1082,9 +1232,10 @@ export default function AdminConfigPage() {
                   variant="ghost"
                   size="sm"
                   className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
-                  onClick={() =>
+                  onClick={() => {
                     setCustomCategories((prev) => prev.filter((_, i) => i !== idx))
-                  }
+                    markDirty("customCategories")
+                  }}
                   title="Remove"
                 >
                   <X className="h-3 w-3" />
@@ -1100,7 +1251,7 @@ export default function AdminConfigPage() {
             ...CATEGORIES,
             ...customCategories.map((c) => c.code),
           ]}
-          onAdd={(cat) => setCustomCategories((prev) => [...prev, cat])}
+          onAdd={(cat) => { setCustomCategories((prev) => [...prev, cat]); markDirty("customCategories") }}
         />
       </SectionCard>
 
@@ -1124,9 +1275,10 @@ export default function AdminConfigPage() {
               <input
                 type="checkbox"
                 checked={notifChannels[key]}
-                onChange={(e) =>
+                onChange={(e) => {
                   setNotifChannels((prev) => ({ ...prev, [key]: e.target.checked }))
-                }
+                  markDirty("notificationChannels")
+                }}
               />
               <span className="text-sm">{label}</span>
             </label>
@@ -1148,7 +1300,7 @@ export default function AdminConfigPage() {
               type="radio"
               value="reset"
               checked={resubmitBehavior === "reset"}
-              onChange={() => setResubmitBehavior("reset")}
+              onChange={() => { setResubmitBehavior("reset"); markDirty("resubmitBehavior") }}
             />
             Reset to beginning
           </label>
@@ -1157,7 +1309,7 @@ export default function AdminConfigPage() {
               type="radio"
               value="continue"
               checked={resubmitBehavior === "continue"}
-              onChange={() => setResubmitBehavior("continue")}
+              onChange={() => { setResubmitBehavior("continue"); markDirty("resubmitBehavior") }}
             />
             Continue from current step
           </label>
