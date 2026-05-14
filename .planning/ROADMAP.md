@@ -146,8 +146,8 @@ Plans:
 
 **Plans:** 2 plans
 Plans:
-- [ ] 01-api-extension-PLAN.md — Extend GET/PUT /api/admin/config to accept costCenterId with fallback merge and CC ownership validation
-- [ ] 02-ui-cc-selector-PLAN.md — Add CC selector to /admin/config page, wire re-fetch and saves to selected CC
+- [ ] 04-01-backend-PLAN.md — Wave 0 test stubs + mergeCategories helper + customCategories VALID_KEYS/schema + public config update + POST /api/requests custom category support
+- [ ] 04-02-admin-ui-PLAN.md — Custom Categories SectionCard in /admin/config with add/rename/toggle/remove per CC
 
 ---
 
