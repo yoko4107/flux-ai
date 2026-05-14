@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { ChevronUp, ChevronDown, X } from "lucide-react"
+import { ChevronUp, ChevronDown, X, UserPlus, ShieldCheck, Banknote } from "lucide-react"
 
 // Types
 interface UserOption {
@@ -401,7 +401,10 @@ export default function AdminConfigPage() {
         </div>
       </SectionCard>
 
-      {/* 2. Deadlines */}
+      {/* 2. Role Assignments */}
+      <RoleAssignmentsCard users={users} onChanged={loadData} />
+
+      {/* 3. Deadlines */}
       <SectionCard
         title="Deadlines"
         metaKey="submissionDeadline"
@@ -584,5 +587,155 @@ export default function AdminConfigPage() {
         </div>
       </SectionCard>
     </div>
+  )
+}
+
+function RoleAssignmentsCard({ users, onChanged }: { users: UserOption[]; onChanged: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [addApprover, setAddApprover] = useState("")
+  const [addFinance, setAddFinance] = useState("")
+
+  const approvers = users.filter((u) => u.role === "APPROVER")
+  const financeUsers = users.filter((u) => u.role === "FINANCE")
+  const employees = users.filter((u) => u.role === "EMPLOYEE")
+
+  async function changeRole(userId: string, role: string) {
+    setBusy(userId)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      })
+      if (res.ok) {
+        toast.success("Role updated")
+        onChanged()
+      } else {
+        const err = await res.json().catch(() => null)
+        toast.error(err?.error ?? "Failed to update role")
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Role Assignments</CardTitle>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Assign which employees act as approvers or finance officers. All other role management is
+          handled within{" "}
+          <a href="/admin/cost-centers" className="underline text-blue-600">Cost Centers</a>.
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-6 md:grid-cols-2">
+        {/* Approvers */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-semibold text-gray-800">Approvers</span>
+          </div>
+          {approvers.length === 0 ? (
+            <p className="text-xs text-gray-400">No approvers assigned.</p>
+          ) : (
+            <ul className="space-y-1">
+              {approvers.map((u) => (
+                <li key={u.id} className="flex items-center justify-between rounded-md bg-blue-50 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
+                    <p className="text-[11px] text-gray-500">{u.email}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                    disabled={busy === u.id}
+                    onClick={() => changeRole(u.id, "EMPLOYEE")}
+                    title="Remove approver role"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <select
+              value={addApprover}
+              onChange={(e) => setAddApprover(e.target.value)}
+              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+            >
+              <option value="">Promote employee to approver…</option>
+              {employees.map((u) => (
+                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={!addApprover || !!busy}
+              onClick={() => { changeRole(addApprover, "APPROVER"); setAddApprover("") }}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Finance Officers */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Banknote className="h-4 w-4 text-green-600" />
+            <span className="text-sm font-semibold text-gray-800">Finance Officers</span>
+          </div>
+          {financeUsers.length === 0 ? (
+            <p className="text-xs text-gray-400">No finance officers assigned.</p>
+          ) : (
+            <ul className="space-y-1">
+              {financeUsers.map((u) => (
+                <li key={u.id} className="flex items-center justify-between rounded-md bg-green-50 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
+                    <p className="text-[11px] text-gray-500">{u.email}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                    disabled={busy === u.id}
+                    onClick={() => changeRole(u.id, "EMPLOYEE")}
+                    title="Remove finance role"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <select
+              value={addFinance}
+              onChange={(e) => setAddFinance(e.target.value)}
+              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+            >
+              <option value="">Promote employee to finance…</option>
+              {employees.map((u) => (
+                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={!addFinance || !!busy}
+              onClick={() => { changeRole(addFinance, "FINANCE"); setAddFinance("") }}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
