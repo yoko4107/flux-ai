@@ -80,8 +80,7 @@ export default async function AdminDashboard({
           amount: true,
           currency: true,
           updatedAt: true,
-          employee: { select: { name: true, email: true } },
-          costCenter: { select: { name: true } },
+          employee: { select: { name: true, email: true, costCenter: { select: { name: true } } } },
         },
       }),
     ])
@@ -305,7 +304,7 @@ export default async function AdminDashboard({
                       <span className="font-medium text-sm">{req.title}</span>
                       <p className="text-xs text-gray-500">
                         {req.employee.name ?? req.employee.email ?? "Unknown"}
-                        {req.costCenter ? ` · ${req.costCenter.name}` : ""} — {daysOverdue} day{daysOverdue !== 1 ? "s" : ""} overdue
+                        {req.employee.costCenter ? ` · ${req.employee.costCenter.name}` : ""} — {daysOverdue} day{daysOverdue !== 1 ? "s" : ""} overdue
                       </p>
                     </div>
                     <div className="text-right shrink-0 ml-4">
