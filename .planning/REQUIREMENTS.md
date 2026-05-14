@@ -32,9 +32,9 @@
 
 ### Expense Categories
 
-- [ ] **CATG-01**: Admin can view default expense categories (Travel, Meals, Office, etc.)
-- [ ] **CATG-02**: Admin can add custom expense category
-- [ ] **CATG-03**: Admin can modify category name and description
+- [x] **CATG-01**: Admin can view default expense categories (Travel, Meals, Office, etc.)
+- [x] **CATG-02**: Admin can add custom expense category
+- [x] **CATG-03**: Admin can modify category name and description
 - [ ] **CATG-04**: Admin can delete unused category
 - [ ] **CATG-05**: Admin can set category-specific spending limit
 - [ ] **CATG-06**: Employee can only submit expenses in enabled categories for their cost center
@@ -139,9 +139,9 @@
 | LMIT-03 | 3 | Complete (03-01) |
 | LMIT-04 | 3 | Complete (03-01) |
 | LMIT-05 | 3 | Complete (03-01) |
-| CATG-01 | 4 | Pending |
-| CATG-02 | 4 | Pending |
-| CATG-03 | 4 | Pending |
+| CATG-01 | 4 | Complete |
+| CATG-02 | 4 | Complete |
+| CATG-03 | 4 | Complete |
 | CATG-04 | 4 | Pending |
 | CATG-05 | 4 | Pending |
 | CATG-06 | 4 | Pending |

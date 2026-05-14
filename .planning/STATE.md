@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 03-per-cc-policies-deadlines 03-02-deadline-ui-PLAN.md
-last_updated: "2026-05-13T10:26:59.612Z"
+stopped_at: Completed 04-custom-expense-categories 04-01-backend-PLAN.md
+last_updated: "2026-05-14T03:23:05.316Z"
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 100
+  total_plans: 8
+  completed_plans: 7
+  percent: 88
 ---
 
 # PROJECT STATE: System Configuration — Cost Center Admin Panel
@@ -35,15 +35,16 @@ Admins can configure all reimbursement rules per cost center without technical s
 
 ## Current Position
 
-**Phase:** Phase 3 — Per-CC Policies & Deadlines (2/2 plans complete)  
+**Phase:** Phase 4 — Custom Expense Categories (1/2 plans complete)  
 **Milestone:** System Configuration v1  
-**Progress:** [██████████] 100%
+**Progress:** [█████████░] 88%
 
 ```
 Roadmap: ████████████████████████ 100% (structure complete)
 Phase 1:  ████████████████████████ 100% (2/2 plans done)
 Phase 2:  ████████████████████████ 100% (2/2 plans done)
 Phase 3:  ████████████████████████ 100% (2/2 plans done)
+Phase 4:  ████████████░░░░░░░░░░░░  50% (1/2 plans done)
 ```
 
 ---
@@ -55,7 +56,7 @@ Phase 3:  ███████████████████████�
 | 1 | Foundation | 4 | Complete (2/2 plans) | 2 |
 | 2 | Approval Workflows | 7 | Complete (2/2 plans) | 2 |
 | 3 | Per-CC Policies & Deadlines | 10 | Complete (2/2 plans) | 2 |
-| 4 | Expense Categories | 6 | Not started | 1 |
+| 4 | Expense Categories | 6 | In progress (1/2 plans) | 2 |
 | 5 | Role Management | 6 | Not started | 1 |
 | 6 | Regional Rules | 5 | Not started | 1 |
 | 7 | Deadlines | 5 | Not started | 1 |
@@ -90,6 +91,9 @@ Phase 3:  ███████████████████████�
 | validateSubmission returns string[] details array | Locked | ✓ LMIT-05: UI can show multiple errors |
 | updatedAt used as approvedAt proxy for payment deadline | Locked | ✓ No dedicated approvedAt field; updatedAt changes on status change |
 | Public config endpoint CC-scoped via user.costCenterId+organizationId lookup | Locked | ✓ Returns correct config per employee's CC |
+| DEFAULT_CATEGORY_CODES constant avoids Prisma runtime import for testability | Locked | ✓ Pure helper testable without DB |
+| v1: custom category codes stored as Category.OTHER in DB (no Prisma schema changes) | Locked | ✓ Free-text/JSON approach, user-mandated |
+| allCategories field in public config = merged defaults + enabled custom codes | Locked | ✓ Employee form reads single ready-to-use list |
 
 ---
 
@@ -140,7 +144,7 @@ Phase 3:  ███████████████████████�
 
 **Last Updated:** 2026-05-13 (Plan 03-01 execution)  
 **Last Editor:** Claude (executor)  
-**Stopped At:** Completed 03-per-cc-policies-deadlines 03-02-deadline-ui-PLAN.md
+**Stopped At:** Completed 04-custom-expense-categories 04-01-backend-PLAN.md
 **Branch:** claude/dreamy-jones-22d72f  
 **Mode:** yolo (with plan_check, verifier, nyquist_validation workflows enabled)
 

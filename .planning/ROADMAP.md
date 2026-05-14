@@ -144,7 +144,7 @@ Plans:
 4. Admin sets $200 limit on "Meals" category
 5. Existing reimbursements with enum categories display correctly post-migration
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 04-01-backend-PLAN.md — Wave 0 test stubs + mergeCategories helper + customCategories VALID_KEYS/schema + public config update + POST /api/requests custom category support
 - [ ] 04-02-admin-ui-PLAN.md — Custom Categories SectionCard in /admin/config with add/rename/toggle/remove per CC
@@ -265,7 +265,7 @@ Plans:
 | 1. Cost Center Config Scoping | 2/2 | Complete    | 2026-05-13 |
 | 2. Per-CC Approval Workflow | 2/2 | Complete   | 2026-05-13 |
 | 3. Per-CC Policies & Deadlines | 2/2 | Complete   | 2026-05-13 |
-| 4. Custom Expense Categories | 0/1 | Not started | — |
+| 4. Custom Expense Categories | 1/2 | In Progress|  |
 | 5. Validation & Polish | 0/1 | Not started | — |
 
 ---
