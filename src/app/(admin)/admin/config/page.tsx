@@ -654,6 +654,8 @@ export default function AdminConfigPage() {
     return false
   }
 
+  const currency = selectedCC?.currency ?? "USD"
+
   // Approval committee helpers
   const approverOptions = users.filter(
     (u) => (u.role === "APPROVER" || u.role === "ADMIN") && !committee.approvers.includes(u.id)
@@ -1073,7 +1075,7 @@ export default function AdminConfigPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Category</th>
-                <th className="px-4 py-2 text-left font-medium text-gray-600">Max Amount (USD)</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">Max Amount ({currency})</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -1110,7 +1112,7 @@ export default function AdminConfigPage() {
         saving={savingReceipt}
       >
         <div className="space-y-1 max-w-xs">
-          <Label htmlFor="requireReceiptAbove">Require receipt for amounts above (USD)</Label>
+          <Label htmlFor="requireReceiptAbove">Require receipt for amounts above ({currency})</Label>
           <Input
             id="requireReceiptAbove"
             type="number"

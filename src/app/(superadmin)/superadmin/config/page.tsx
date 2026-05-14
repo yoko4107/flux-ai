@@ -85,7 +85,7 @@ export default function AdminConfigPage() {
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<UserOption[]>([])
   const [meta, setMeta] = useState<Record<string, ConfigMeta>>({})
-  const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([])
+  const [orgs, setOrgs] = useState<{ id: string; name: string; baseCurrency?: string }[]>([])
   const [scopeOrgId, setScopeOrgId] = useState<string>(GLOBAL_SCOPE)
 
   // Approval Committee
@@ -314,6 +314,7 @@ export default function AdminConfigPage() {
   const CATEGORIES = ["TRAVEL", "MEALS", "SUPPLIES", "ACCOMMODATION", "COMMUNICATION", "TRAINING", "ENTERTAINMENT", "MEETING", "EQUIPMENT", "PRINTING", "SOFTWARE", "OTHER"] as const
   const isGlobal = scopeOrgId === GLOBAL_SCOPE
   const currentOrgName = isGlobal ? "Global defaults" : (orgs.find((o) => o.id === scopeOrgId)?.name ?? "Organization")
+  const currency = isGlobal ? "USD" : (orgs.find((o) => o.id === scopeOrgId)?.baseCurrency ?? "USD")
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -510,7 +511,7 @@ export default function AdminConfigPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Category</th>
-                <th className="px-4 py-2 text-left font-medium text-gray-600">Max Amount (USD)</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">Max Amount ({currency})</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -546,7 +547,7 @@ export default function AdminConfigPage() {
         saving={savingReceipt}
       >
         <div className="space-y-1 max-w-xs">
-          <Label htmlFor="requireReceiptAbove">Require receipt for amounts above (USD)</Label>
+          <Label htmlFor="requireReceiptAbove">Require receipt for amounts above ({currency})</Label>
           <Input
             id="requireReceiptAbove"
             type="number"
