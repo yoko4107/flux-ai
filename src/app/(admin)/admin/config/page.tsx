@@ -523,32 +523,30 @@ export default function AdminConfigPage() {
           setFinanceOfficerId(null)
         }
 
-        if (typeof c.submissionDeadline === "number") {
-          setSubmissionDeadline(c.submissionDeadline)
-        }
-        if (typeof c.approvalDeadline === "number") {
-          setApprovalDeadline(c.approvalDeadline)
-        }
-        if (typeof c.paymentDeadline === "number") {
-          setPaymentDeadline(c.paymentDeadline)
-        }
-        if (c.maxAmountPerCategory) {
-          setMaxAmounts(c.maxAmountPerCategory as Record<string, number>)
-        }
-        if (typeof c.requireReceiptAbove === "number") {
-          setRequireReceiptAbove(c.requireReceiptAbove)
-        }
-        if (typeof c.maxAmountPerRequest === "number") setMaxAmountPerRequest(c.maxAmountPerRequest)
-        if (typeof c.approvalThreshold === "number") setApprovalThreshold(c.approvalThreshold)
-        if (Array.isArray(c.allowedCategories)) {
-          setAllowedCategories(c.allowedCategories as string[])
-        }
-        if (c.notificationChannels) {
-          setNotifChannels(c.notificationChannels as NotificationChannels)
-        }
-        if (c.resubmitBehavior) {
-          setResubmitBehavior(c.resubmitBehavior as "reset" | "continue")
-        }
+        setSubmissionDeadline(typeof c.submissionDeadline === "number" ? c.submissionDeadline : 25)
+        setApprovalDeadline(typeof c.approvalDeadline === "number" ? c.approvalDeadline : 5)
+        setPaymentDeadline(typeof c.paymentDeadline === "number" ? c.paymentDeadline : 5)
+        setMaxAmounts(
+          c.maxAmountPerCategory
+            ? (c.maxAmountPerCategory as Record<string, number>)
+            : { TRAVEL: 5000, MEALS: 500, SUPPLIES: 1000, OTHER: 2000 }
+        )
+        setRequireReceiptAbove(typeof c.requireReceiptAbove === "number" ? c.requireReceiptAbove : 50)
+        setMaxAmountPerRequest(typeof c.maxAmountPerRequest === "number" ? c.maxAmountPerRequest : 0)
+        setApprovalThreshold(typeof c.approvalThreshold === "number" ? c.approvalThreshold : 0)
+        setAllowedCategories(
+          Array.isArray(c.allowedCategories)
+            ? (c.allowedCategories as string[])
+            : ["TRAVEL", "MEALS", "SUPPLIES", "OTHER"]
+        )
+        setNotifChannels(
+          c.notificationChannels
+            ? (c.notificationChannels as NotificationChannels)
+            : { email: true, whatsapp: false, inApp: true }
+        )
+        setResubmitBehavior(
+          (c.resubmitBehavior as "reset" | "continue") ?? "reset"
+        )
         if (Array.isArray(c.customCategories)) {
           setCustomCategories(c.customCategories as CustomCategory[])
         } else {
@@ -572,12 +570,16 @@ export default function AdminConfigPage() {
           submissionDeadline: typeof c.submissionDeadline === "number" ? c.submissionDeadline : 25,
           approvalDeadline: typeof c.approvalDeadline === "number" ? c.approvalDeadline : 5,
           paymentDeadline: typeof c.paymentDeadline === "number" ? c.paymentDeadline : 5,
-          maxAmounts: (c.maxAmountPerCategory as Record<string, number>) ?? { TRAVEL: 5000, MEALS: 500, SUPPLIES: 1000, OTHER: 2000 },
+          maxAmounts: c.maxAmountPerCategory
+            ? (c.maxAmountPerCategory as Record<string, number>)
+            : { TRAVEL: 5000, MEALS: 500, SUPPLIES: 1000, OTHER: 2000 },
           requireReceiptAbove: typeof c.requireReceiptAbove === "number" ? c.requireReceiptAbove : 50,
           maxAmountPerRequest: typeof c.maxAmountPerRequest === "number" ? c.maxAmountPerRequest : 0,
           approvalThreshold: typeof c.approvalThreshold === "number" ? c.approvalThreshold : 0,
           allowedCategories: Array.isArray(c.allowedCategories) ? c.allowedCategories as string[] : ["TRAVEL", "MEALS", "SUPPLIES", "OTHER"],
-          notifChannels: (c.notificationChannels as NotificationChannels) ?? { email: true, whatsapp: false, inApp: true },
+          notifChannels: c.notificationChannels
+            ? (c.notificationChannels as NotificationChannels)
+            : { email: true, whatsapp: false, inApp: true },
           resubmitBehavior: (c.resubmitBehavior as "reset" | "continue") ?? "reset",
           customCategories: Array.isArray(c.customCategories) ? c.customCategories as CustomCategory[] : [],
         }
