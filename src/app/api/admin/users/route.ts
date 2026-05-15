@@ -35,6 +35,8 @@ export async function GET(request: Request) {
       role: true,
       status: true,
       department: true,
+      hireDate: true,
+      driveFolderId: true,
       managerId: true,
       organizationId: true,
       costCenterId: true,

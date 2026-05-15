@@ -5,13 +5,13 @@ import { writeAuditLog } from "@/lib/audit"
 import { z } from "zod"
 
 const patchUserSchema = z.object({
+  name: z.string().nullable().optional(),
   role: z.enum(["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN", "SUPER_ADMIN"] as const).optional(),
   status: z.enum(["ACTIVE", "INACTIVE", "PENDING"] as const).optional(),
   department: z.string().nullable().optional(),
+  hireDate: z.string().nullable().optional(),
   managerId: z.string().nullable().optional(),
   organizationId: z.string().nullable().optional(),
-  // Regional cost center — drives the user's reimbursement payout currency.
-  // null clears the assignment (falls through to org base).
   costCenterId: z.string().nullable().optional(),
   // HR profile fields — stored on UserProfile (upserted if missing)
   jobTitle: z.string().nullable().optional(),
@@ -59,7 +59,7 @@ export async function PATCH(
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const { role, status, department, managerId, organizationId, costCenterId,
+  const { name, role, status, department, hireDate, managerId, organizationId, costCenterId,
           jobTitle, phone, employmentStartDate, employmentEndDate } = parsed.data
 
   // If the caller is trying to assign a cost center, make sure it belongs
@@ -92,9 +92,11 @@ export async function PATCH(
   const user = await prisma.user.update({
     where: { id },
     data: {
+      ...(name !== undefined ? { name } : {}),
       ...(role !== undefined ? { role } : {}),
       ...(status !== undefined ? { status } : {}),
       ...(department !== undefined ? { department } : {}),
+      ...(hireDate !== undefined ? { hireDate: hireDate ? new Date(hireDate) : null } : {}),
       ...(managerId !== undefined ? { managerId } : {}),
       ...(organizationId !== undefined ? { organizationId } : {}),
       ...(costCenterId !== undefined ? { costCenterId } : {}),
@@ -109,6 +111,8 @@ export async function PATCH(
       role: true,
       status: true,
       department: true,
+      hireDate: true,
+      driveFolderId: true,
       managerId: true,
       organizationId: true,
       costCenterId: true,

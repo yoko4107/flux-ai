@@ -190,6 +190,8 @@ model Organization {
   baseCurrency String @default("IDR")
   countryCode String @default("ID")        // ISO-3166-1 alpha-2; drives default holidays
   createdAt DateTime @default(now())
+  driveEncryptedToken String?  @db.Text
+  driveRootFolderId   String?
   users     User[]
   invitations UserInvitation[]
   configs   AdminConfig[]
@@ -257,6 +259,8 @@ model User {
   // unassigned users fall through to org base.
   costCenterId  String?
   costCenter    CostCenter? @relation("UserCostCenter", fields: [costCenterId], references: [id], onDelete: SetNull)
+  hireDate      DateTime?
+  driveFolderId String?
   status        UserStatus @default(PENDING)
   phone         String?
   emailAliases  Json?      // Array<{ type: 'work' | 'personal', email: string }>
