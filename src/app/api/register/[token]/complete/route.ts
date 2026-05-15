@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { createEmployeeFolder } from "@/lib/google-drive"
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -51,6 +52,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     where: { token },
     data: { status: "ACCEPTED", acceptedAt: new Date() },
   })
+
+  // Auto-create Drive folder if org has Drive connected
+  if (invitation.orgId) {
+    createEmployeeFolder(invitation.orgId, user.id, user.name ?? user.email ?? user.id).catch(() => {
+      // Non-fatal: folder can be created manually from admin panel
+    })
+  }
 
   return NextResponse.json({ ok: true, userId: user.id, email: user.email })
 }
