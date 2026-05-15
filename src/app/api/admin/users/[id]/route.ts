@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit"
 import { z } from "zod"
 
 const patchUserSchema = z.object({
+  name: z.string().nullable().optional(),
   role: z.enum(["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN", "SUPER_ADMIN"] as const).optional(),
   status: z.enum(["ACTIVE", "INACTIVE", "PENDING"] as const).optional(),
   department: z.string().nullable().optional(),
@@ -53,7 +54,7 @@ export async function PATCH(
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const { role, status, department, hireDate, managerId, organizationId, costCenterId } = parsed.data
+  const { name, role, status, department, hireDate, managerId, organizationId, costCenterId } = parsed.data
 
   // If the caller is trying to assign a cost center, make sure it belongs
   // to the target user's org (or the caller's org for non-super-admins).
@@ -71,6 +72,7 @@ export async function PATCH(
   const user = await prisma.user.update({
     where: { id },
     data: {
+      ...(name !== undefined ? { name } : {}),
       ...(role !== undefined ? { role } : {}),
       ...(status !== undefined ? { status } : {}),
       ...(department !== undefined ? { department } : {}),

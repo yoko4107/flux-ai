@@ -93,7 +93,7 @@ export default function CostCentersPage() {
       const [cc, u, ds] = await Promise.all([
         fetch("/api/admin/cost-centers").then((r) => r.json()),
         fetch("/api/admin/users").then((r) => r.json()),
-        fetch("/api/admin/google-drive/status").then((r) => r.json()),
+        fetch("/api/admin/google-drive/status").then((r) => r.json()).catch(() => ({ connected: false, rootFolderUrl: null })),
       ])
       setItems(cc.costCenters ?? [])
       setUsers(Array.isArray(u) ? u : [])
