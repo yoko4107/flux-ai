@@ -6,7 +6,6 @@ import {
   Power, UserPlus, X, ChevronDown, ChevronRight, FolderOpen, HardDrive,
 } from "lucide-react"
 import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
   AlertDialogContent,
