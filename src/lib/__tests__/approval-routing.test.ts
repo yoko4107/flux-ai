@@ -1,56 +1,48 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
   resolveCommittee,
   buildApprovalSteps,
   selectNotifyTargets,
 } from "../approval-routing-helpers"
 
-// Mock the config module
-vi.mock("@/lib/config", () => ({
-  getConfig: vi.fn(),
-}))
-
-import { getConfig } from "@/lib/config"
-
-const mockGetConfig = vi.mocked(getConfig)
+function makePrisma(responses: Array<object | null>) {
+  let call = 0
+  return {
+    approvalCommittee: {
+      findFirst: vi.fn().mockImplementation(() => Promise.resolve(responses[call++] ?? null)),
+    },
+  } as any
+}
 
 describe("resolveCommittee", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
   it("Test 1 (CC lookup): returns CC-specific committee over org-wide when CC ID given", async () => {
-    const ccCommittee = { mode: "sequential", approvers: ["user-cc-1", "user-cc-2"] }
-    const orgCommittee = { mode: "parallel", approvers: ["user-org-1"] }
+    const mockPrisma = makePrisma([
+      { mode: "sequential", members: [{ userId: "user-cc-1", order: 0 }, { userId: "user-cc-2", order: 1 }] },
+    ])
 
-    // CC-specific row wins
-    mockGetConfig.mockResolvedValueOnce(ccCommittee)
-
-    const mockPrisma = {} as any
     const result = await resolveCommittee(mockPrisma, "org-123", "cc-456")
 
-    expect(mockGetConfig).toHaveBeenCalledWith(mockPrisma, "approvalCommittee", "org-123", "cc-456")
-    expect(result).toEqual(ccCommittee)
-    // Should NOT equal org-wide committee
-    expect(result).not.toEqual(orgCommittee)
+    expect(mockPrisma.approvalCommittee.findFirst).toHaveBeenCalledWith({
+      where: { organizationId: "org-123", costCenterId: "cc-456" },
+      include: { members: { orderBy: { order: "asc" } } },
+    })
+    expect(result).toEqual({ mode: "sequential", approvers: ["user-cc-1", "user-cc-2"] })
+    expect(result).not.toEqual({ mode: "parallel", approvers: ["user-org-1"] })
   })
 
   it("Test 4 (fallback): returns org-wide committee when no CC-specific committee exists", async () => {
-    const orgCommittee = { mode: "parallel", approvers: ["user-org-1"] }
+    const mockPrisma = makePrisma([
+      { mode: "parallel", members: [{ userId: "user-org-1", order: 0 }] },
+    ])
 
-    // No CC committee — getConfig falls back to org-wide (that's getConfig's job)
-    mockGetConfig.mockResolvedValueOnce(orgCommittee)
-
-    const mockPrisma = {} as any
     const result = await resolveCommittee(mockPrisma, "org-123", null)
 
-    expect(result).toEqual(orgCommittee)
+    expect(result).toEqual({ mode: "parallel", approvers: ["user-org-1"] })
   })
 
   it("returns null when no committee exists at any level", async () => {
-    mockGetConfig.mockResolvedValueOnce(null)
+    const mockPrisma = makePrisma([null, null, null])
 
-    const mockPrisma = {} as any
     const result = await resolveCommittee(mockPrisma, "org-123", "cc-456")
 
     expect(result).toBeNull()
