@@ -4,6 +4,47 @@ import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/audit"
 import { z } from "zod"
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth()
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  const { id } = await params
+  const isSuperAdmin = session.user.role === "SUPER_ADMIN"
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true, name: true, email: true, role: true, status: true,
+      department: true, phone: true, emailAliases: true, hireDate: true,
+      driveFolderId: true, kycVerified: true, createdAt: true,
+      managerId: true, organizationId: true, costCenterId: true,
+      organization: { select: { id: true, name: true } },
+      manager: { select: { id: true, name: true, email: true } },
+      costCenter: { select: { id: true, code: true, name: true, currency: true } },
+      profile: {
+        select: {
+          jobTitle: true, employmentStartDate: true, employmentEndDate: true,
+          emergencyContact: true, socialLinks: true,
+        },
+      },
+      _count: { select: { requests: true } },
+    },
+  })
+
+  if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 })
+  if (!isSuperAdmin && user.organizationId !== session.user.organizationId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
+  return NextResponse.json(user)
+}
+
 const patchUserSchema = z.object({
   name: z.string().nullable().optional(),
   role: z.enum(["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN", "SUPER_ADMIN"] as const).optional(),
