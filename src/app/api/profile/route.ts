@@ -25,7 +25,7 @@ export async function GET() {
       notificationPrefs: true,
       organization: { select: { id: true, name: true, slug: true } },
       manager: { select: { id: true, name: true, email: true } },
-      profile: { select: { jobTitle: true, employmentStartDate: true } },
+      profile: { select: { jobTitle: true, employmentStartDate: true, emergencyContact: true, socialLinks: true } },
     },
   })
   if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -35,6 +35,17 @@ export async function GET() {
 const emailAliasSchema = z.object({
   type: z.enum(["work", "personal"]),
   email: z.string().email(),
+})
+
+const emergencyContactSchema = z.object({
+  name: z.string().min(1),
+  phone: z.string().min(1),
+  relation: z.string().min(1),
+})
+
+const socialLinkSchema = z.object({
+  platform: z.string().min(1),
+  url: z.string().url(),
 })
 
 const updateSchema = z.object({
@@ -52,6 +63,8 @@ const updateSchema = z.object({
       weeklyDigest: z.boolean(),
     })
     .optional(),
+  emergencyContact: emergencyContactSchema.optional().nullable(),
+  socialLinks: z.array(socialLinkSchema).max(10).optional().nullable(),
 })
 
 export async function PUT(request: Request) {
@@ -64,17 +77,36 @@ export async function PUT(request: Request) {
   const parsed = updateSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: "Invalid input", details: parsed.error.issues }, { status: 400 })
 
+  const { emergencyContact, socialLinks, ...userFields } = parsed.data
+
   const updated = await prisma.user.update({
     where: { id: session.user.id },
     data: {
-      ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
-      ...(parsed.data.department !== undefined ? { department: parsed.data.department } : {}),
-      ...(parsed.data.phone !== undefined ? { phone: parsed.data.phone } : {}),
-      ...(parsed.data.emailAliases !== undefined ? { emailAliases: parsed.data.emailAliases ?? [] } : {}),
-      ...(parsed.data.notificationPrefs !== undefined ? { notificationPrefs: parsed.data.notificationPrefs } : {}),
+      ...(userFields.name !== undefined ? { name: userFields.name } : {}),
+      ...(userFields.department !== undefined ? { department: userFields.department } : {}),
+      ...(userFields.phone !== undefined ? { phone: userFields.phone } : {}),
+      ...(userFields.emailAliases !== undefined ? { emailAliases: userFields.emailAliases ?? [] } : {}),
+      ...(userFields.notificationPrefs !== undefined ? { notificationPrefs: userFields.notificationPrefs } : {}),
+      ...(emergencyContact !== undefined || socialLinks !== undefined
+        ? {
+            profile: {
+              upsert: {
+                create: {
+                  ...(emergencyContact !== undefined ? { emergencyContact } : {}),
+                  ...(socialLinks !== undefined ? { socialLinks: socialLinks ?? [] } : {}),
+                },
+                update: {
+                  ...(emergencyContact !== undefined ? { emergencyContact } : {}),
+                  ...(socialLinks !== undefined ? { socialLinks: socialLinks ?? [] } : {}),
+                },
+              },
+            },
+          }
+        : {}),
     },
     select: {
       id: true, name: true, department: true, phone: true, emailAliases: true, notificationPrefs: true,
+      profile: { select: { emergencyContact: true, socialLinks: true } },
     },
   })
 

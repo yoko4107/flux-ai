@@ -486,6 +486,10 @@ model UserProfile {
   notifyOnProposal    Boolean          @default(true)
   notifyBeforeLeave   String?          @default("1d")
   notifyInApp         Boolean          @default(true)
+  // { name, phone, relation } — single emergency contact
+  emergencyContact    Json?
+  // [{ platform, url }] — LinkedIn, Twitter, GitHub, etc.
+  socialLinks         Json?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 }
