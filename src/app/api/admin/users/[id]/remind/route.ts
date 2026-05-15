@@ -19,7 +19,7 @@ export async function POST(
     where: { id: userId },
     select: { id: true, email: true, name: true, organizationId: true, costCenterId: true, role: true },
   })
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 })
+  if (!user || !user.email) return NextResponse.json({ error: "User not found" }, { status: 404 })
 
   const isSuperAdmin = session.user.role === "SUPER_ADMIN"
   if (!isSuperAdmin && user.organizationId !== orgId) {
@@ -37,8 +37,8 @@ export async function POST(
     data: {
       email: user.email,
       role: user.role as "EMPLOYEE" | "APPROVER" | "FINANCE" | "ADMIN",
-      orgId: user.organizationId,
-      costCenterId: user.costCenterId,
+      orgId: user.organizationId ?? undefined,
+      costCenterId: user.costCenterId ?? undefined,
       invitedById: session.user.id,
       expiresAt,
     },
