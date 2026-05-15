@@ -78,12 +78,14 @@ export default function CostCentersPage() {
     try {
       const [cc, u, ds] = await Promise.all([
         fetch("/api/admin/cost-centers").then((r) => r.ok ? r.json() : Promise.reject(new Error(`cost-centers ${r.status}`))),
-        fetch("/api/admin/users").then((r) => r.ok ? r.json() : Promise.reject(new Error(`users ${r.status}`))),
+        fetch("/api/admin/users").then((r) => r.ok ? r.json() : r.json().then((e) => { toast.error(e?.error ?? `users ${r.status}`); return [] })).catch(() => []),
         fetch("/api/admin/google-drive/status").then((r) => r.json()).catch(() => ({ connected: false, rootFolderUrl: null })),
       ])
       setItems(cc.costCenters ?? [])
       setUsers(Array.isArray(u) ? u : [])
       setDrive({ connected: ds.connected ?? false, rootFolderUrl: ds.rootFolderUrl ?? null })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load cost centers")
     } finally {
       setLoading(false)
     }
