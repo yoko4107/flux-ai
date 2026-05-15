@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Loader2, Plus, Save, Trash2, Building2, Users as UsersIcon,
-  Power, UserPlus, X, ChevronDown, ChevronRight, Upload, FolderOpen, HardDrive, ShieldCheck, Banknote,
+  Power, UserPlus, X, ChevronDown, ChevronRight, FolderOpen, HardDrive,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   AlertDialog,
   AlertDialogContent,
@@ -141,7 +140,7 @@ export default function CostCentersPage() {
           <h1 className="text-2xl font-bold text-gray-900">User Cost Center</h1>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
             Each cost center is a regional office with its own currency. Employees are managed directly under
-            their cost center. Approver and Finance roles can be assigned below.
+            their cost center.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -205,8 +204,6 @@ export default function CostCentersPage() {
         </div>
       )}
 
-      <RoleAssignmentsSection users={users} onRefresh={fetchAll} />
-
       <UnassignedUsers
         users={users.filter((u) => !u.costCenterId && u.role === "EMPLOYEE")}
         costCenters={items}
@@ -236,160 +233,6 @@ export default function CostCentersPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
-}
-
-function RoleAssignmentsSection({
-  users,
-  onRefresh,
-}: {
-  users: UserRow[]
-  onRefresh: () => void
-}) {
-  const [busy, setBusy] = useState<string | null>(null)
-  const [addApprover, setAddApprover] = useState("")
-  const [addFinance, setAddFinance] = useState("")
-
-  const approvers = useMemo(() => users.filter((u) => u.role === "APPROVER"), [users])
-  const financeUsers = useMemo(() => users.filter((u) => u.role === "FINANCE"), [users])
-  const employees = useMemo(() => users.filter((u) => u.role === "EMPLOYEE"), [users])
-
-  async function changeRole(userId: string, role: string) {
-    setBusy(userId)
-    try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
-      })
-      if (res.ok) {
-        toast.success("Role updated")
-        onRefresh()
-      } else {
-        const err = await res.json().catch(() => null)
-        toast.error(err?.error ?? "Failed to update role")
-      }
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Role Assignments</CardTitle>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Promote employees to Approver or Finance Officer roles. These users will be available for workflow assignment in Configuration.
-        </p>
-      </CardHeader>
-      <CardContent className="grid gap-6 md:grid-cols-2">
-        {/* Approvers */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-blue-600" />
-            <span className="text-sm font-semibold text-gray-800">Approvers</span>
-          </div>
-          {approvers.length === 0 ? (
-            <p className="text-xs text-gray-400">No approvers assigned.</p>
-          ) : (
-            <ul className="space-y-1">
-              {approvers.map((u) => (
-                <li key={u.id} className="flex items-center justify-between rounded-md bg-blue-50 px-3 py-2">
-                  <div>
-                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
-                    <p className="text-[11px] text-gray-500">{u.email}</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                    disabled={busy === u.id}
-                    onClick={() => changeRole(u.id, "EMPLOYEE")}
-                    title="Remove approver role"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-2">
-            <select
-              value={addApprover}
-              onChange={(e) => setAddApprover(e.target.value)}
-              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
-            >
-              <option value="">Promote employee to approver…</option>
-              {employees.map((u) => (
-                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              disabled={!addApprover || !!busy}
-              onClick={() => { changeRole(addApprover, "APPROVER"); setAddApprover("") }}
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Finance Officers */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Banknote className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-semibold text-gray-800">Finance Officers</span>
-          </div>
-          {financeUsers.length === 0 ? (
-            <p className="text-xs text-gray-400">No finance officers assigned.</p>
-          ) : (
-            <ul className="space-y-1">
-              {financeUsers.map((u) => (
-                <li key={u.id} className="flex items-center justify-between rounded-md bg-green-50 px-3 py-2">
-                  <div>
-                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
-                    <p className="text-[11px] text-gray-500">{u.email}</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                    disabled={busy === u.id}
-                    onClick={() => changeRole(u.id, "EMPLOYEE")}
-                    title="Remove finance role"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-2">
-            <select
-              value={addFinance}
-              onChange={(e) => setAddFinance(e.target.value)}
-              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
-            >
-              <option value="">Promote employee to finance…</option>
-              {employees.map((u) => (
-                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              disabled={!addFinance || !!busy}
-              onClick={() => { changeRole(addFinance, "FINANCE"); setAddFinance("") }}
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   )
 }
 
