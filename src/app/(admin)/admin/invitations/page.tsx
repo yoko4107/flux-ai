@@ -8,6 +8,7 @@ import { Upload, Plus, Copy, RefreshCw, Clock, CheckCircle, XCircle } from "luci
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { parseCSV, type InviteRole } from "@/lib/parse-csv"
 
 interface Invitation {
   id: string
@@ -26,25 +27,11 @@ interface Invitation {
 interface Org { id: string; name: string }
 
 const ROLES = ["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN"] as const
-type Role = typeof ROLES[number]
 
 const STATUS_BADGE: Record<string, { label: string; classes: string }> = {
   PENDING: { label: "Pending", classes: "bg-yellow-100 text-yellow-700" },
   ACCEPTED: { label: "Accepted", classes: "bg-green-100 text-green-700" },
   EXPIRED: { label: "Expired", classes: "bg-gray-100 text-gray-500" },
-}
-
-function parseCSV(text: string): { email: string; role: Role; phone?: string }[] {
-  const lines = text.trim().split("\n").filter(Boolean)
-  const results: { email: string; role: Role; phone?: string }[] = []
-  for (const line of lines) {
-    if (line.startsWith("#") || line.toLowerCase().startsWith("email")) continue
-    const [email, role, phone] = line.split(",").map((s) => s.trim())
-    if (!email || !email.includes("@")) continue
-    const validRole = ROLES.includes((role?.toUpperCase() ?? "") as Role) ? (role.toUpperCase() as Role) : "EMPLOYEE"
-    results.push({ email, role: validRole, phone: phone || undefined })
-  }
-  return results
 }
 
 export default function InvitationsPage() {
@@ -56,14 +43,14 @@ export default function InvitationsPage() {
   // Bulk invite dialog
   const [bulkOpen, setBulkOpen] = useState(false)
   const [csvText, setCsvText] = useState("")
-  const [parsed, setParsed] = useState<{ email: string; role: Role; phone?: string }[]>([])
+  const [parsed, setParsed] = useState<{ email: string; role: InviteRole; phone?: string }[]>([])
   const [selectedOrg, setSelectedOrg] = useState("")
   const [sending, setSending] = useState(false)
   const [results, setResults] = useState<{ email: string; status: string; link?: string }[]>([])
 
   // Single invite dialog
   const [singleOpen, setSingleOpen] = useState(false)
-  const [singleForm, setSingleForm] = useState({ email: "", role: "EMPLOYEE" as Role, phone: "", orgId: "" })
+  const [singleForm, setSingleForm] = useState({ email: "", role: "EMPLOYEE" as InviteRole, phone: "", orgId: "" })
   const [sendingSingle, setSendingSingle] = useState(false)
 
   const fileRef = useRef<HTMLInputElement>(null)
@@ -349,7 +336,7 @@ export default function InvitationsPage() {
             </div>
             <div className="space-y-1">
               <Label>Role</Label>
-              <select value={singleForm.role} onChange={(e) => setSingleForm((p) => ({ ...p, role: e.target.value as Role }))} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring">
+              <select value={singleForm.role} onChange={(e) => setSingleForm((p) => ({ ...p, role: e.target.value as InviteRole }))} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring">
                 {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
