@@ -258,6 +258,8 @@ model User {
   costCenterId  String?
   costCenter    CostCenter? @relation("UserCostCenter", fields: [costCenterId], references: [id], onDelete: SetNull)
   status        UserStatus @default(PENDING)
+  phone         String?
+  emailAliases  Json?      // Array<{ type: 'work' | 'personal', email: string }>
   nationalIdUrl String?
   selfieUrl     String?
   kycVerified   Boolean    @default(false)

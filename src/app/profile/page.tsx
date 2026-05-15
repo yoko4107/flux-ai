@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Shield, Building2, Mail, CheckCircle2, XCircle } from "lucide-react"
+import { Shield, Building2, Mail, CheckCircle2, XCircle, Phone, Plus, X } from "lucide-react"
 
 type NotificationPrefs = {
   email: boolean
@@ -20,12 +20,19 @@ type NotificationPrefs = {
   weeklyDigest: boolean
 }
 
+type EmailAlias = {
+  type: "work" | "personal"
+  email: string
+}
+
 type Profile = {
   id: string
   name: string | null
   email: string | null
   role: string
   department: string | null
+  phone: string | null
+  emailAliases: EmailAlias[] | null
   status: string
   kycVerified: boolean
   createdAt: string
@@ -55,6 +62,8 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [name, setName] = useState("")
   const [department, setDepartment] = useState("")
+  const [phone, setPhone] = useState("")
+  const [aliases, setAliases] = useState<EmailAlias[]>([])
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -72,6 +81,8 @@ export default function ProfilePage() {
         setProfile(p)
         setName(p.name ?? "")
         setDepartment(p.department ?? "")
+        setPhone(p.phone ?? "")
+        setAliases(Array.isArray(p.emailAliases) ? p.emailAliases : [])
         setPrefs({ ...DEFAULT_PREFS, ...(p.notificationPrefs ?? {}) })
       })
       .catch((e) => setError(e?.message || "Network error"))
@@ -83,11 +94,29 @@ export default function ProfilePage() {
     const res = await fetch("/api/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, department: department || null, notificationPrefs: prefs }),
+      body: JSON.stringify({
+        name,
+        department: department || null,
+        phone: phone || null,
+        emailAliases: aliases,
+        notificationPrefs: prefs,
+      }),
     })
     setSaving(false)
     if (res.ok) toast.success("Profile updated")
     else toast.error("Failed to save")
+  }
+
+  function addAlias(type: "work" | "personal") {
+    setAliases((prev) => [...prev, { type, email: "" }])
+  }
+
+  function updateAlias(index: number, email: string) {
+    setAliases((prev) => prev.map((a, i) => (i === index ? { ...a, email } : a)))
+  }
+
+  function removeAlias(index: number) {
+    setAliases((prev) => prev.filter((_, i) => i !== index))
   }
 
   if (loading) return <div className="text-sm text-gray-500">Loading…</div>
@@ -96,6 +125,9 @@ export default function ProfilePage() {
   const initials = (profile.name ?? profile.email ?? "U")
     .split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
   const roleInfo = ROLE_LABEL[profile.role] ?? { label: profile.role, color: "bg-gray-100 text-gray-700" }
+
+  const workAliases = aliases.filter((a) => a.type === "work")
+  const personalAliases = aliases.filter((a) => a.type === "personal")
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -148,7 +180,7 @@ export default function ProfilePage() {
       <Card>
         <CardHeader>
           <CardTitle>Details</CardTitle>
-          <CardDescription>Update your display name and department.</CardDescription>
+          <CardDescription>Update your display name, department, and contact info.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -160,6 +192,121 @@ export default function ProfilePage() {
               <Label htmlFor="dept">Department</Label>
               <Input id="dept" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. Engineering" />
             </div>
+          </div>
+          <div>
+            <Label htmlFor="phone">Phone number</Label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+62 812 3456 7890"
+                className="pl-9"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email aliases */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Email aliases</CardTitle>
+          <CardDescription>Add work or personal email addresses linked to your account.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Work aliases */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold">Work</h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => addAlias("work")}
+              >
+                <Plus className="h-3 w-3 mr-1" /> Add
+              </Button>
+            </div>
+            {workAliases.length === 0 ? (
+              <p className="text-xs text-gray-400">No work aliases added.</p>
+            ) : (
+              <div className="space-y-2">
+                {aliases.map((alias, index) =>
+                  alias.type !== "work" ? null : (
+                    <div key={index} className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-gray-400 shrink-0" />
+                      <Input
+                        type="email"
+                        value={alias.email}
+                        onChange={(e) => updateAlias(index, e.target.value)}
+                        placeholder="work@company.com"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-gray-400 hover:text-red-500"
+                        onClick={() => removeAlias(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Personal aliases */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold">Personal</h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => addAlias("personal")}
+              >
+                <Plus className="h-3 w-3 mr-1" /> Add
+              </Button>
+            </div>
+            {personalAliases.length === 0 ? (
+              <p className="text-xs text-gray-400">No personal aliases added.</p>
+            ) : (
+              <div className="space-y-2">
+                {aliases.map((alias, index) =>
+                  alias.type !== "personal" ? null : (
+                    <div key={index} className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-gray-400 shrink-0" />
+                      <Input
+                        type="email"
+                        value={alias.email}
+                        onChange={(e) => updateAlias(index, e.target.value)}
+                        placeholder="personal@gmail.com"
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-gray-400 hover:text-red-500"
+                        onClick={() => removeAlias(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
