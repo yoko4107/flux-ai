@@ -107,6 +107,25 @@ export async function GET(request: Request) {
     }
   }
 
+  // Fetch approvalCommittee from new relational model (overrides any AdminConfig row)
+  const committee = await prisma.approvalCommittee.findFirst({
+    where: {
+      organizationId: scope.orgId ?? null,
+      costCenterId: costCenterId ?? null,
+    },
+    include: { members: { orderBy: { order: "asc" } } },
+  })
+  if (committee) {
+    result["approvalCommittee"] = {
+      mode: committee.mode,
+      approvers: committee.members.map((m: { userId: string }) => m.userId),
+    }
+    meta["approvalCommittee"] = {
+      updatedAt: committee.updatedAt.toISOString(),
+      updatedBy: null,
+    }
+  }
+
   return NextResponse.json({ configs: result, meta, scope: { organizationId: scope.orgId, costCenterId } })
 }
 
@@ -149,6 +168,49 @@ export async function PUT(request: Request) {
     if (!owned) {
       return NextResponse.json({ error: "Cost center not found or access denied" }, { status: 403 })
     }
+  }
+
+  // Intercept approvalCommittee — write to new relational model instead of AdminConfig
+  if (key === "approvalCommittee") {
+    const { mode, approvers } = valueResult.data as { mode: "sequential" | "parallel"; approvers: string[] }
+
+    // Upsert the committee row (findFirst + create/update because nullable unique keys
+    // aren't supported by Prisma's upsert where compound input)
+    let committee = await prisma.approvalCommittee.findFirst({
+      where: { organizationId: scope.orgId ?? null, costCenterId: ccId ?? null },
+    })
+    if (committee) {
+      committee = await prisma.approvalCommittee.update({
+        where: { id: committee.id },
+        data: { mode },
+      })
+    } else {
+      committee = await prisma.approvalCommittee.create({
+        data: {
+          organizationId: scope.orgId ?? null,
+          costCenterId: ccId ?? null,
+          mode,
+        },
+      })
+    }
+
+    // Replace members: delete all then recreate in order
+    await prisma.approvalCommitteeMember.deleteMany({ where: { committeeId: committee.id } })
+    await prisma.approvalCommitteeMember.createMany({
+      data: approvers.map((userId, idx) => ({
+        committeeId: committee.id,
+        userId,
+        order: idx,
+      })),
+    })
+
+    await writeAuditLog(prisma, {
+      actorId: session.user.id,
+      action: "CONFIG_UPDATED",
+      details: { key, organizationId: scope.orgId, costCenterId: ccId, newValue: { mode, approvers } },
+    })
+
+    return NextResponse.json({ config: { key, value: { mode, approvers }, updatedAt: committee.updatedAt }, scope: { organizationId: scope.orgId, costCenterId: ccId } })
   }
 
   const existing = await prisma.adminConfig.findUnique({

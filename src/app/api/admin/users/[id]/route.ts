@@ -125,24 +125,16 @@ export async function PATCH(
     },
   })
 
-  // Cascade: remove from approvalCommittee configs when demoting from APPROVER/ADMIN
+  // Cascade: remove from approval committee memberships when demoting from APPROVER/ADMIN
   const wasApprover = existing.role === "APPROVER" || existing.role === "ADMIN"
   const becomingNonApprover = role && role !== "APPROVER" && role !== "ADMIN"
   if (wasApprover && becomingNonApprover && existing.organizationId) {
-    const configs = await prisma.adminConfig.findMany({
-      where: { key: "approvalCommittee", organizationId: existing.organizationId },
+    await prisma.approvalCommitteeMember.deleteMany({
+      where: {
+        userId: id,
+        committee: { organizationId: existing.organizationId },
+      },
     })
-    for (const config of configs) {
-      const val = config.value as { mode?: string; approvers?: string[] } | null
-      if (!val || !Array.isArray(val.approvers)) continue
-      if (!val.approvers.includes(id)) continue
-      await prisma.adminConfig.update({
-        where: { id: config.id },
-        data: {
-          value: { ...val, approvers: val.approvers.filter((approverId) => approverId !== id) },
-        },
-      })
-    }
   }
 
   await writeAuditLog(prisma, {
