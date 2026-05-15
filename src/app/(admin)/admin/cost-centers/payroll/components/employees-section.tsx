@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   Loader2, Search, Trash2, ChevronDown, ChevronRight,
-  Save, Calculator, FilePlus2, Upload, X, FileUp, Link2,
+  Save, Calculator, FilePlus2, Upload, X, FileUp, Link2, User as UserIcon,
 } from "lucide-react"
 
 type CostCenter = {
@@ -16,6 +16,13 @@ type CostCenter = {
   active: boolean
 }
 
+type UserProfile = {
+  jobTitle: string | null
+  phone: string | null
+  employmentStartDate: string | null
+  employmentEndDate: string | null
+}
+
 type User = {
   id: string
   name: string | null
@@ -23,6 +30,7 @@ type User = {
   role: string
   status: "ACTIVE" | "INACTIVE" | "PENDING"
   department: string | null
+  profile?: UserProfile | null
 }
 
 type Compensation = {
@@ -162,7 +170,8 @@ export function EmployeesSection({ costCenter }: { costCenter: CostCenter }) {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900 truncate">{emp.name ?? "—"}</p>
                     <p className="text-xs text-gray-500 truncate">
-                      {emp.email}{emp.department ? ` · ${emp.department}` : ""}
+                      {emp.email}
+                      {emp.profile?.jobTitle ? ` · ${emp.profile.jobTitle}` : emp.department ? ` · ${emp.department}` : ""}
                     </p>
                   </div>
                   <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${STATUS_CLASSES[emp.status] ?? STATUS_CLASSES.PENDING}`}>
@@ -207,7 +216,7 @@ function PayrollPanel({ user, costCenter }: { user: User; costCenter: CostCenter
   const [preview, setPreview] = useState<CalcPreview | null>(null)
   const [busy, setBusy] = useState<null | "preview" | "generate">(null)
   const [genResult, setGenResult] = useState<{ id: string; period: string } | null>(null)
-  const [tab, setTab] = useState<"comp" | "payslip">("comp")
+  const [tab, setTab] = useState<"profile" | "comp" | "payslip">("profile")
 
   useEffect(() => {
     setLoading(true)
@@ -313,7 +322,7 @@ function PayrollPanel({ user, costCenter }: { user: User; costCenter: CostCenter
     <div className="space-y-3">
       {/* Sub-tabs */}
       <div className="flex items-center gap-4 border-b border-blue-200/60">
-        {(["comp", "payslip"] as const).map((t) => (
+        {(["profile", "comp", "payslip"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -323,10 +332,14 @@ function PayrollPanel({ user, costCenter }: { user: User; costCenter: CostCenter
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t === "comp" ? "Compensation profile" : "Generate payslip"}
+            {t === "profile" ? "Employee profile" : t === "comp" ? "Compensation" : "Generate payslip"}
           </button>
         ))}
       </div>
+
+      {tab === "profile" && (
+        <EmployeeProfilePanel user={user} />
+      )}
 
       {tab === "comp" && (
         <div className="space-y-3">
@@ -513,6 +526,125 @@ function PayrollPanel({ user, costCenter }: { user: User; costCenter: CostCenter
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function EmployeeProfilePanel({ user }: { user: User }) {
+  const profile = user.profile
+  const [form, setForm] = useState({
+    jobTitle: profile?.jobTitle ?? "",
+    phone: profile?.phone ?? "",
+    department: user.department ?? "",
+    employmentStartDate: profile?.employmentStartDate
+      ? profile.employmentStartDate.slice(0, 10)
+      : "",
+    employmentEndDate: profile?.employmentEndDate
+      ? profile.employmentEndDate.slice(0, 10)
+      : "",
+  })
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          department: form.department || null,
+          jobTitle: form.jobTitle || null,
+          phone: form.phone || null,
+          employmentStartDate: form.employmentStartDate || null,
+          employmentEndDate: form.employmentEndDate || null,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        alert(err?.error ?? "Save failed")
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="block">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">Job title</span>
+          <input
+            value={form.jobTitle}
+            onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
+            placeholder="e.g. Software Engineer"
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">Department</span>
+          <input
+            value={form.department}
+            onChange={(e) => setForm({ ...form, department: e.target.value })}
+            placeholder="e.g. Engineering"
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">Phone</span>
+          <input
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            placeholder="+62 812 …"
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">Employment start date</span>
+          <input
+            type="date"
+            value={form.employmentStartDate}
+            onChange={(e) => setForm({ ...form, employmentStartDate: e.target.value })}
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">Employment end date</span>
+          <input
+            type="date"
+            value={form.employmentEndDate}
+            onChange={(e) => setForm({ ...form, employmentEndDate: e.target.value })}
+            className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm"
+          />
+          <span className="text-[10px] text-gray-400 mt-0.5">Leave blank for active employees</span>
+        </label>
+        <div className="block">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">Status</span>
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_CLASSES[user.status] ?? STATUS_CLASSES.PENDING}`}>
+              {user.status.charAt(0) + user.status.slice(1).toLowerCase()}
+            </span>
+            <span className="text-[10px] text-gray-400">Managed via user settings</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          Save profile
+        </button>
+        <Link
+          href={`/admin/users/${user.id}`}
+          className="inline-flex items-center gap-1 text-xs text-blue-700 hover:underline"
+        >
+          <UserIcon className="h-3.5 w-3.5" />
+          Full profile
+        </Link>
+      </div>
     </div>
   )
 }

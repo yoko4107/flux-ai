@@ -441,6 +441,8 @@ model UserProfile {
   dateFormat          String           @default("DD/MM/YYYY")
   weekStartsOn        Int              @default(1)
   jobTitle            String?
+  employmentStartDate DateTime?
+  employmentEndDate   DateTime?
   phone               String?
   photoUrl            String?
   calendarProvider    CalendarProvider @default(NONE)
