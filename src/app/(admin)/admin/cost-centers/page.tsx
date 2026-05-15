@@ -60,8 +60,6 @@ type UserRow = {
 
 type DriveStatus = { connected: boolean; rootFolderUrl: string | null }
 
-type DriveStatus = { connected: boolean; rootFolderUrl: string | null }
-
 export default function CostCentersPage() {
   const [items, setItems] = useState<CostCenter[]>([])
   const [users, setUsers] = useState<UserRow[]>([])
