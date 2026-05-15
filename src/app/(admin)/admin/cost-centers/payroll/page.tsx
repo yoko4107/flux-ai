@@ -3,18 +3,9 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { Loader2, ArrowLeft } from "lucide-react"
-import { CostCenterSelector } from "./components/cost-center-selector"
+import { CostCenterSelector, type CostCenter } from "@/components/admin/CostCenterSelector"
 import { EmployeesSection } from "./components/employees-section"
 import { RulesSection } from "./components/rules-section"
-
-type CostCenter = {
-  id: string
-  code: string
-  name: string
-  countryCode: string
-  currency: string
-  active: boolean
-}
 
 export default function CostCenterPayrollPage() {
   const [costCenters, setCostCenters] = useState<CostCenter[]>([])
