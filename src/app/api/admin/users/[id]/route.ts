@@ -8,10 +8,9 @@ const patchUserSchema = z.object({
   role: z.enum(["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN", "SUPER_ADMIN"] as const).optional(),
   status: z.enum(["ACTIVE", "INACTIVE", "PENDING"] as const).optional(),
   department: z.string().nullable().optional(),
+  hireDate: z.string().nullable().optional(),
   managerId: z.string().nullable().optional(),
   organizationId: z.string().nullable().optional(),
-  // Regional cost center — drives the user's reimbursement payout currency.
-  // null clears the assignment (falls through to org base).
   costCenterId: z.string().nullable().optional(),
 })
 
@@ -54,7 +53,7 @@ export async function PATCH(
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const { role, status, department, managerId, organizationId, costCenterId } = parsed.data
+  const { role, status, department, hireDate, managerId, organizationId, costCenterId } = parsed.data
 
   // If the caller is trying to assign a cost center, make sure it belongs
   // to the target user's org (or the caller's org for non-super-admins).
@@ -75,6 +74,7 @@ export async function PATCH(
       ...(role !== undefined ? { role } : {}),
       ...(status !== undefined ? { status } : {}),
       ...(department !== undefined ? { department } : {}),
+      ...(hireDate !== undefined ? { hireDate: hireDate ? new Date(hireDate) : null } : {}),
       ...(managerId !== undefined ? { managerId } : {}),
       ...(organizationId !== undefined ? { organizationId } : {}),
       ...(costCenterId !== undefined ? { costCenterId } : {}),
@@ -86,6 +86,8 @@ export async function PATCH(
       role: true,
       status: true,
       department: true,
+      hireDate: true,
+      driveFolderId: true,
       managerId: true,
       organizationId: true,
       costCenterId: true,

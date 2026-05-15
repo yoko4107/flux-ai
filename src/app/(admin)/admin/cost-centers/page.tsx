@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Loader2, Plus, Save, Trash2, Building2, Users as UsersIcon,
-  Power, UserPlus, X, ChevronDown, ChevronRight, Upload,
+  Power, UserPlus, X, ChevronDown, ChevronRight, Upload, FolderOpen, HardDrive,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -40,6 +40,8 @@ type UserRow = {
   role: string
   status: "ACTIVE" | "INACTIVE" | "PENDING"
   department: string | null
+  hireDate: string | null
+  driveFolderId: string | null
   costCenterId: string | null
   costCenter: { id: string; code: string; name: string; currency: string } | null
   organizationId: string | null
@@ -61,12 +63,15 @@ function parseCSV(text: string): { email: string; role: Role; phone?: string }[]
   return results
 }
 
+type DriveStatus = { connected: boolean; rootFolderUrl: string | null }
+
 export default function CostCentersPage() {
   const [items, setItems] = useState<CostCenter[]>([])
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+  const [drive, setDrive] = useState<DriveStatus>({ connected: false, rootFolderUrl: null })
 
   // Bulk upload — scoped to a specific cost center
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -85,18 +90,32 @@ export default function CostCentersPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [cc, u] = await Promise.all([
+      const [cc, u, ds] = await Promise.all([
         fetch("/api/admin/cost-centers").then((r) => r.json()),
         fetch("/api/admin/users").then((r) => r.json()),
+        fetch("/api/admin/google-drive/status").then((r) => r.json()),
       ])
       setItems(cc.costCenters ?? [])
       setUsers(Array.isArray(u) ? u : [])
+      setDrive({ connected: ds.connected ?? false, rootFolderUrl: ds.rootFolderUrl ?? null })
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("driveConnected")) {
+      toast.success("Google Drive connected successfully")
+      window.history.replaceState({}, "", window.location.pathname)
+    } else if (params.get("driveError")) {
+      toast.error("Failed to connect Google Drive")
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [])
 
   async function save(id: string, patch: Partial<CostCenter>) {
     setBusy(id)
@@ -206,7 +225,7 @@ export default function CostCentersPage() {
 
   return (
     <div className="max-w-5xl space-y-5 p-1">
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">User Cost Center</h1>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
@@ -215,12 +234,31 @@ export default function CostCentersPage() {
             <a href="/admin/config" className="underline text-blue-600 hover:text-blue-800">Configuration</a>.
           </p>
         </div>
-        <button
-          onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-3 py-2 text-sm font-medium text-white"
-        >
-          <Plus className="h-3.5 w-3.5" /> New cost center
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {drive.connected ? (
+            <a
+              href={drive.rootFolderUrl ?? "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
+            >
+              <HardDrive className="h-3.5 w-3.5" /> Drive connected
+            </a>
+          ) : (
+            <a
+              href="/api/admin/google-drive/connect"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <HardDrive className="h-3.5 w-3.5" /> Connect Google Drive
+            </a>
+          )}
+          <button
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-3 py-2 text-sm font-medium text-white"
+          >
+            <Plus className="h-3.5 w-3.5" /> New cost center
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -248,6 +286,7 @@ export default function CostCentersPage() {
               cc={cc}
               users={users.filter((u) => u.costCenterId === cc.id)}
               busy={busy === cc.id}
+              driveConnected={drive.connected}
               onSave={(patch) => save(cc.id, patch)}
               onDelete={() => remove(cc)}
               onRefresh={fetchAll}
@@ -416,6 +455,7 @@ function CostCenterCard({
   cc,
   users,
   busy,
+  driveConnected,
   onSave,
   onDelete,
   onRefresh,
@@ -424,6 +464,7 @@ function CostCenterCard({
   cc: CostCenter
   users: UserRow[]
   busy: boolean
+  driveConnected: boolean
   onSave: (patch: Partial<CostCenter>) => void
   onDelete: () => void
   onRefresh: () => void
@@ -580,6 +621,7 @@ function CostCenterCard({
                       <th className="px-5 py-2.5 text-left text-xs font-medium text-gray-500">Name</th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Email</th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Department</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Hire Date</th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Status</th>
                       <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Actions</th>
                     </tr>
@@ -588,9 +630,10 @@ function CostCenterCard({
                     {employees.map((u) => (
                       <tr key={u.id} className="hover:bg-gray-50/60">
                         {editMember?.id === u.id ? (
-                          <td colSpan={5} className="px-5 py-2">
+                          <td colSpan={6} className="px-5 py-2">
                             <EditMemberRow
                               user={u}
+                              driveConnected={driveConnected}
                               onCancel={() => setEditMember(null)}
                               onSaved={() => { setEditMember(null); onRefresh() }}
                               onRemove={() => { setEditMember(null); onRefresh() }}
@@ -601,11 +644,25 @@ function CostCenterCard({
                             <td className="px-5 py-2.5 font-medium text-gray-900">{u.name ?? "—"}</td>
                             <td className="px-4 py-2.5 text-gray-500">{u.email}</td>
                             <td className="px-4 py-2.5 text-gray-500">{u.department ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-gray-500">
+                              {u.hireDate ? new Date(u.hireDate).toLocaleDateString() : "—"}
+                            </td>
                             <td className="px-4 py-2.5">
                               <StatusBadge status={u.status} />
                             </td>
                             <td className="px-4 py-2.5 text-right">
                               <div className="flex items-center justify-end gap-1.5">
+                                {u.driveFolderId ? (
+                                  <a
+                                    href={`https://drive.google.com/drive/folders/${u.driveFolderId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="rounded p-1.5 text-green-600 border border-green-200 hover:bg-green-50"
+                                    title="Open Drive folder"
+                                  >
+                                    <FolderOpen className="h-3 w-3" />
+                                  </a>
+                                ) : null}
                                 <button
                                   onClick={() => setEditMember(u)}
                                   className="rounded px-2 py-1 text-xs text-gray-500 border border-gray-200 hover:bg-gray-100"
@@ -710,16 +767,22 @@ function AddMemberForm({ costCenterId, onCancel, onSaved }: { costCenterId: stri
   )
 }
 
-function EditMemberRow({ user, onCancel, onSaved, onRemove }: {
+function EditMemberRow({ user, driveConnected, onCancel, onSaved, onRemove }: {
   user: UserRow
+  driveConnected: boolean
   onCancel: () => void
   onSaved: () => void
   onRemove: () => void
 }) {
   const [name, setName] = useState(user.name ?? "")
   const [department, setDepartment] = useState(user.department ?? "")
+  const [hireDate, setHireDate] = useState(
+    user.hireDate ? user.hireDate.slice(0, 10) : ""
+  )
   const [status, setStatus] = useState<"ACTIVE" | "INACTIVE" | "PENDING">(user.status)
   const [busy, setBusy] = useState(false)
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [folderId, setFolderId] = useState(user.driveFolderId)
 
   async function save() {
     setBusy(true)
@@ -727,7 +790,12 @@ function EditMemberRow({ user, onCancel, onSaved, onRemove }: {
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name || null, department: department || null, status }),
+        body: JSON.stringify({
+          name: name || null,
+          department: department || null,
+          hireDate: hireDate || null,
+          status,
+        }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
@@ -760,9 +828,25 @@ function EditMemberRow({ user, onCancel, onSaved, onRemove }: {
     }
   }
 
+  async function createDriveFolder() {
+    setCreatingFolder(true)
+    try {
+      const res = await fetch(`/api/admin/google-drive/employee/${user.id}`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to create Drive folder")
+      } else {
+        setFolderId(data.folderId)
+        toast.success("Drive folder created")
+      }
+    } finally {
+      setCreatingFolder(false)
+    }
+  }
+
   return (
     <div className="my-1 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-4">
         <input
           placeholder="Full name"
           value={name}
@@ -775,6 +859,15 @@ function EditMemberRow({ user, onCancel, onSaved, onRemove }: {
           onChange={(e) => setDepartment(e.target.value)}
           className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
         />
+        <div>
+          <label className="block text-[10px] text-gray-500 mb-0.5">Hire Date</label>
+          <input
+            type="date"
+            value={hireDate}
+            onChange={(e) => setHireDate(e.target.value)}
+            className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+          />
+        </div>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE" | "PENDING")}
@@ -785,6 +878,32 @@ function EditMemberRow({ user, onCancel, onSaved, onRemove }: {
           <option value="PENDING">Pending</option>
         </select>
       </div>
+
+      {/* Drive folder row */}
+      <div className="mt-2 flex items-center gap-2">
+        {folderId ? (
+          <a
+            href={`https://drive.google.com/drive/folders/${folderId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-green-700 hover:underline"
+          >
+            <FolderOpen className="h-3 w-3" /> Open Drive folder
+          </a>
+        ) : driveConnected ? (
+          <button
+            onClick={createDriveFolder}
+            disabled={creatingFolder}
+            className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-50"
+          >
+            {creatingFolder ? <Loader2 className="h-3 w-3 animate-spin" /> : <HardDrive className="h-3 w-3" />}
+            {creatingFolder ? "Creating…" : "Create Drive folder"}
+          </button>
+        ) : (
+          <span className="text-[11px] text-gray-400">Connect Google Drive to manage employee folders</span>
+        )}
+      </div>
+
       <div className="mt-2 flex items-center justify-between">
         <button
           onClick={removeFromCenter}
