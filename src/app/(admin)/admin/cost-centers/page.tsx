@@ -91,8 +91,8 @@ export default function CostCentersPage() {
     setLoading(true)
     try {
       const [cc, u, ds] = await Promise.all([
-        fetch("/api/admin/cost-centers").then((r) => r.json()),
-        fetch("/api/admin/users").then((r) => r.json()),
+        fetch("/api/admin/cost-centers").then((r) => r.ok ? r.json() : Promise.reject(new Error(`cost-centers ${r.status}`))),
+        fetch("/api/admin/users").then((r) => r.ok ? r.json() : Promise.reject(new Error(`users ${r.status}`))),
         fetch("/api/admin/google-drive/status").then((r) => r.json()).catch(() => ({ connected: false, rootFolderUrl: null })),
       ])
       setItems(cc.costCenters ?? [])
