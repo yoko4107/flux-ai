@@ -13,6 +13,11 @@ const patchUserSchema = z.object({
   // Regional cost center — drives the user's reimbursement payout currency.
   // null clears the assignment (falls through to org base).
   costCenterId: z.string().nullable().optional(),
+  // HR profile fields — stored on UserProfile (upserted if missing)
+  jobTitle: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  employmentStartDate: z.string().nullable().optional(), // ISO date string
+  employmentEndDate: z.string().nullable().optional(),   // ISO date string
 })
 
 export async function PATCH(
@@ -54,7 +59,8 @@ export async function PATCH(
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const { role, status, department, managerId, organizationId, costCenterId } = parsed.data
+  const { role, status, department, managerId, organizationId, costCenterId,
+          jobTitle, phone, employmentStartDate, employmentEndDate } = parsed.data
 
   // If the caller is trying to assign a cost center, make sure it belongs
   // to the target user's org (or the caller's org for non-super-admins).
@@ -69,6 +75,20 @@ export async function PATCH(
     }
   }
 
+  // Build profile patch if any HR fields were sent
+  const hasProfileUpdate = jobTitle !== undefined || phone !== undefined ||
+    employmentStartDate !== undefined || employmentEndDate !== undefined
+  const profileData = hasProfileUpdate ? {
+    ...(jobTitle !== undefined ? { jobTitle } : {}),
+    ...(phone !== undefined ? { phone } : {}),
+    ...(employmentStartDate !== undefined
+      ? { employmentStartDate: employmentStartDate ? new Date(employmentStartDate) : null }
+      : {}),
+    ...(employmentEndDate !== undefined
+      ? { employmentEndDate: employmentEndDate ? new Date(employmentEndDate) : null }
+      : {}),
+  } : undefined
+
   const user = await prisma.user.update({
     where: { id },
     data: {
@@ -78,6 +98,9 @@ export async function PATCH(
       ...(managerId !== undefined ? { managerId } : {}),
       ...(organizationId !== undefined ? { organizationId } : {}),
       ...(costCenterId !== undefined ? { costCenterId } : {}),
+      ...(profileData ? {
+        profile: { upsert: { create: profileData, update: profileData } },
+      } : {}),
     },
     select: {
       id: true,
@@ -93,6 +116,7 @@ export async function PATCH(
       manager: { select: { name: true } },
       organization: { select: { id: true, name: true } },
       costCenter: { select: { id: true, code: true, name: true, currency: true, countryCode: true } },
+      profile: { select: { jobTitle: true, employmentStartDate: true, employmentEndDate: true, phone: true } },
       _count: { select: { requests: true } },
     },
   })

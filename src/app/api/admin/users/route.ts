@@ -42,6 +42,7 @@ export async function GET(request: Request) {
       manager: { select: { name: true } },
       organization: { select: { id: true, name: true } },
       costCenter: { select: { id: true, code: true, name: true, currency: true } },
+      profile: { select: { jobTitle: true, employmentStartDate: true, employmentEndDate: true, phone: true } },
       _count: { select: { requests: true } },
     },
     orderBy: { createdAt: "desc" },
