@@ -9,7 +9,10 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Shield, Building2, Mail, CheckCircle2, XCircle, Phone, Plus, X, Briefcase, CalendarDays, FolderOpen } from "lucide-react"
+import {
+  Shield, Building2, Mail, CheckCircle2, XCircle, Phone, Plus, X,
+  Briefcase, CalendarDays, FolderOpen, HeartHandshake, Link2, Globe,
+} from "lucide-react"
 
 type NotificationPrefs = {
   email: boolean
@@ -23,6 +26,17 @@ type NotificationPrefs = {
 type EmailAlias = {
   type: "work" | "personal"
   email: string
+}
+
+type EmergencyContact = {
+  name: string
+  phone: string
+  relation: string
+}
+
+type SocialLink = {
+  platform: string
+  url: string
 }
 
 type Profile = {
@@ -41,7 +55,12 @@ type Profile = {
   notificationPrefs: NotificationPrefs | null
   organization: { id: string; name: string; slug: string } | null
   manager: { id: string; name: string | null; email: string | null } | null
-  profile: { jobTitle: string | null; employmentStartDate: string | null } | null
+  profile: {
+    jobTitle: string | null
+    employmentStartDate: string | null
+    emergencyContact: EmergencyContact | null
+    socialLinks: SocialLink[] | null
+  } | null
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
@@ -53,12 +72,33 @@ const DEFAULT_PREFS: NotificationPrefs = {
   weeklyDigest: false,
 }
 
+const EMPTY_EMERGENCY: EmergencyContact = { name: "", phone: "", relation: "" }
+
 const ROLE_LABEL: Record<string, { label: string; color: string }> = {
   EMPLOYEE: { label: "Employee", color: "bg-blue-100 text-blue-700" },
   APPROVER: { label: "Approver", color: "bg-green-100 text-green-700" },
   FINANCE: { label: "Finance", color: "bg-amber-100 text-amber-700" },
   ADMIN: { label: "Admin", color: "bg-gray-100 text-gray-700" },
   SUPER_ADMIN: { label: "Super Admin", color: "bg-purple-100 text-purple-700" },
+}
+
+const SOCIAL_PLATFORMS = [
+  { value: "linkedin", label: "LinkedIn" },
+  { value: "twitter", label: "Twitter / X" },
+  { value: "github", label: "GitHub" },
+  { value: "instagram", label: "Instagram" },
+  { value: "other", label: "Other" },
+]
+
+const PLATFORM_COLORS: Record<string, string> = {
+  linkedin: "text-[#0A66C2]",
+  twitter: "text-[#1DA1F2]",
+  github: "text-gray-800",
+  instagram: "text-pink-500",
+}
+
+function platformIcon(platform: string) {
+  return <Globe className={`h-4 w-4 ${PLATFORM_COLORS[platform] ?? "text-gray-400"}`} />
 }
 
 export default function ProfilePage() {
@@ -68,6 +108,8 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState("")
   const [aliases, setAliases] = useState<EmailAlias[]>([])
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS)
+  const [emergency, setEmergency] = useState<EmergencyContact>(EMPTY_EMERGENCY)
+  const [socials, setSocials] = useState<SocialLink[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -76,10 +118,7 @@ export default function ProfilePage() {
     fetch("/api/profile")
       .then(async (r) => {
         const data = await r.json().catch(() => ({}))
-        if (!r.ok) {
-          setError(data?.error || `HTTP ${r.status}`)
-          return
-        }
+        if (!r.ok) { setError(data?.error || `HTTP ${r.status}`); return }
         const p = data as Profile
         setProfile(p)
         setName(p.name ?? "")
@@ -87,6 +126,8 @@ export default function ProfilePage() {
         setPhone(p.phone ?? "")
         setAliases(Array.isArray(p.emailAliases) ? p.emailAliases : [])
         setPrefs({ ...DEFAULT_PREFS, ...(p.notificationPrefs ?? {}) })
+        setEmergency(p.profile?.emergencyContact ?? EMPTY_EMERGENCY)
+        setSocials(Array.isArray(p.profile?.socialLinks) ? p.profile!.socialLinks! : [])
       })
       .catch((e) => setError(e?.message || "Network error"))
       .finally(() => setLoading(false))
@@ -94,6 +135,10 @@ export default function ProfilePage() {
 
   async function save() {
     setSaving(true)
+    const emergencyPayload =
+      emergency.name.trim() && emergency.phone.trim() && emergency.relation.trim()
+        ? emergency
+        : null
     const res = await fetch("/api/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -103,6 +148,8 @@ export default function ProfilePage() {
         phone: phone || null,
         emailAliases: aliases,
         notificationPrefs: prefs,
+        emergencyContact: emergencyPayload,
+        socialLinks: socials.filter((s) => s.url.trim()),
       }),
     })
     setSaving(false)
@@ -113,13 +160,21 @@ export default function ProfilePage() {
   function addAlias(type: "work" | "personal") {
     setAliases((prev) => [...prev, { type, email: "" }])
   }
-
   function updateAlias(index: number, email: string) {
     setAliases((prev) => prev.map((a, i) => (i === index ? { ...a, email } : a)))
   }
-
   function removeAlias(index: number) {
     setAliases((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function addSocial() {
+    setSocials((prev) => [...prev, { platform: "linkedin", url: "" }])
+  }
+  function updateSocial(index: number, field: keyof SocialLink, value: string) {
+    setSocials((prev) => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)))
+  }
+  function removeSocial(index: number) {
+    setSocials((prev) => prev.filter((_, i) => i !== index))
   }
 
   if (loading) return <div className="text-sm text-gray-500">Loading…</div>
@@ -128,7 +183,6 @@ export default function ProfilePage() {
   const initials = (profile.name ?? profile.email ?? "U")
     .split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
   const roleInfo = ROLE_LABEL[profile.role] ?? { label: profile.role, color: "bg-gray-100 text-gray-700" }
-
   const workAliases = aliases.filter((a) => a.type === "work")
   const personalAliases = aliases.filter((a) => a.type === "personal")
 
@@ -207,10 +261,27 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+          {/* Social links (read-only display in card) */}
+          {socials.length > 0 && (
+            <div className="sm:col-span-2 flex flex-wrap gap-3 pt-1">
+              {socials.filter((s) => s.url.trim()).map((s, i) => (
+                <a
+                  key={i}
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 border rounded-full px-3 py-1 hover:bg-gray-50"
+                >
+                  {platformIcon(s.platform)}
+                  {SOCIAL_PLATFORMS.find((p) => p.value === s.platform)?.label ?? s.platform}
+                </a>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Editable profile */}
+      {/* Editable details */}
       <Card>
         <CardHeader>
           <CardTitle>Details</CardTitle>
@@ -244,6 +315,109 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
 
+      {/* Emergency contact */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <HeartHandshake className="h-5 w-5 text-red-500" />
+            Emergency contact
+          </CardTitle>
+          <CardDescription>Person to reach if you are unreachable in an emergency.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="ec-name">Full name</Label>
+              <Input
+                id="ec-name"
+                value={emergency.name}
+                onChange={(e) => setEmergency({ ...emergency, name: e.target.value })}
+                placeholder="Jane Doe"
+              />
+            </div>
+            <div>
+              <Label htmlFor="ec-relation">Relationship</Label>
+              <Input
+                id="ec-relation"
+                value={emergency.relation}
+                onChange={(e) => setEmergency({ ...emergency, relation: e.target.value })}
+                placeholder="Spouse, Parent, Sibling…"
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="ec-phone">Phone number</Label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                id="ec-phone"
+                type="tel"
+                value={emergency.phone}
+                onChange={(e) => setEmergency({ ...emergency, phone: e.target.value })}
+                placeholder="+62 812 3456 7890"
+                className="pl-9"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Social / professional links */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Link2 className="h-5 w-5" />
+                Professional links
+              </CardTitle>
+              <CardDescription className="mt-1">LinkedIn, GitHub, personal site, etc.</CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={addSocial} disabled={socials.length >= 6}>
+              <Plus className="h-4 w-4 mr-1" /> Add link
+            </Button>
+          </div>
+        </CardHeader>
+        {socials.length > 0 && (
+          <CardContent className="space-y-3">
+            {socials.map((s, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <select
+                  value={s.platform}
+                  onChange={(e) => updateSocial(index, "platform", e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm w-36 shrink-0"
+                >
+                  {SOCIAL_PLATFORMS.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2">
+                    {platformIcon(s.platform)}
+                  </span>
+                  <Input
+                    type="url"
+                    value={s.url}
+                    onChange={(e) => updateSocial(index, "url", e.target.value)}
+                    placeholder="https://"
+                    className="pl-9"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-gray-400 hover:text-red-500"
+                  onClick={() => removeSocial(index)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        )}
+      </Card>
+
       {/* Email aliases */}
       <Card>
         <CardHeader>
@@ -251,17 +425,10 @@ export default function ProfilePage() {
           <CardDescription>Add work or personal email addresses linked to your account.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Work aliases */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold">Work</h3>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => addAlias("work")}
-              >
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => addAlias("work")}>
                 <Plus className="h-3 w-3 mr-1" /> Add
               </Button>
             </div>
@@ -280,13 +447,7 @@ export default function ProfilePage() {
                         placeholder="work@company.com"
                         className="flex-1"
                       />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 text-gray-400 hover:text-red-500"
-                        onClick={() => removeAlias(index)}
-                      >
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-gray-400 hover:text-red-500" onClick={() => removeAlias(index)}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -295,20 +456,11 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
-
           <Separator />
-
-          {/* Personal aliases */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-sm font-semibold">Personal</h3>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => addAlias("personal")}
-              >
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => addAlias("personal")}>
                 <Plus className="h-3 w-3 mr-1" /> Add
               </Button>
             </div>
@@ -327,13 +479,7 @@ export default function ProfilePage() {
                         placeholder="personal@gmail.com"
                         className="flex-1"
                       />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 text-gray-400 hover:text-red-500"
-                        onClick={() => removeAlias(index)}
-                      >
+                      <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-gray-400 hover:text-red-500" onClick={() => removeAlias(index)}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -355,48 +501,18 @@ export default function ProfilePage() {
           <div>
             <h3 className="text-sm font-semibold mb-3">Channels</h3>
             <div className="space-y-2">
-              <ToggleRow
-                label="Email"
-                description="Receive notifications by email"
-                checked={prefs.email}
-                onChange={(v) => setPrefs({ ...prefs, email: v })}
-              />
-              <ToggleRow
-                label="WhatsApp"
-                description="Get time-sensitive alerts on WhatsApp"
-                checked={prefs.whatsapp}
-                onChange={(v) => setPrefs({ ...prefs, whatsapp: v })}
-              />
-              <ToggleRow
-                label="In-app"
-                description="Show the bell notifications inside the app"
-                checked={prefs.inApp}
-                onChange={(v) => setPrefs({ ...prefs, inApp: v })}
-              />
+              <ToggleRow label="Email" description="Receive notifications by email" checked={prefs.email} onChange={(v) => setPrefs({ ...prefs, email: v })} />
+              <ToggleRow label="WhatsApp" description="Get time-sensitive alerts on WhatsApp" checked={prefs.whatsapp} onChange={(v) => setPrefs({ ...prefs, whatsapp: v })} />
+              <ToggleRow label="In-app" description="Show the bell notifications inside the app" checked={prefs.inApp} onChange={(v) => setPrefs({ ...prefs, inApp: v })} />
             </div>
           </div>
           <Separator />
           <div>
             <h3 className="text-sm font-semibold mb-3">Event types</h3>
             <div className="space-y-2">
-              <ToggleRow
-                label="Approval updates"
-                description="When a request is approved, rejected, or needs changes"
-                checked={prefs.approvalUpdates}
-                onChange={(v) => setPrefs({ ...prefs, approvalUpdates: v })}
-              />
-              <ToggleRow
-                label="Payment updates"
-                description="When a reimbursement has been paid out"
-                checked={prefs.paymentUpdates}
-                onChange={(v) => setPrefs({ ...prefs, paymentUpdates: v })}
-              />
-              <ToggleRow
-                label="Weekly digest"
-                description="A Monday summary of pending activity"
-                checked={prefs.weeklyDigest}
-                onChange={(v) => setPrefs({ ...prefs, weeklyDigest: v })}
-              />
+              <ToggleRow label="Approval updates" description="When a request is approved, rejected, or needs changes" checked={prefs.approvalUpdates} onChange={(v) => setPrefs({ ...prefs, approvalUpdates: v })} />
+              <ToggleRow label="Payment updates" description="When a reimbursement has been paid out" checked={prefs.paymentUpdates} onChange={(v) => setPrefs({ ...prefs, paymentUpdates: v })} />
+              <ToggleRow label="Weekly digest" description="A Monday summary of pending activity" checked={prefs.weeklyDigest} onChange={(v) => setPrefs({ ...prefs, weeklyDigest: v })} />
             </div>
           </div>
         </CardContent>
