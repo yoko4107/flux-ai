@@ -5,10 +5,10 @@ import { AlertTriangle } from "lucide-react"
 
 export default function Error({
   error,
-  reset,
+  unstable_retry,
 }: {
   error: Error & { digest?: string }
-  reset: () => void
+  unstable_retry: () => void
 }) {
   return (
     <div className="min-h-screen flex items-center justify-center">
@@ -18,7 +18,7 @@ export default function Error({
         <p className="text-gray-500 max-w-md">
           An unexpected error occurred. Please try again or contact support.
         </p>
-        <Button onClick={reset}>Try Again</Button>
+        <Button onClick={unstable_retry}>Try Again</Button>
       </div>
     </div>
   )
