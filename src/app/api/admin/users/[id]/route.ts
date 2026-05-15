@@ -125,6 +125,18 @@ export async function PATCH(
     },
   })
 
+  // Cascade: remove from approval committee memberships when demoting from APPROVER/ADMIN
+  const wasApprover = existing.role === "APPROVER" || existing.role === "ADMIN"
+  const becomingNonApprover = role && role !== "APPROVER" && role !== "ADMIN"
+  if (wasApprover && becomingNonApprover && existing.organizationId) {
+    await prisma.approvalCommitteeMember.deleteMany({
+      where: {
+        userId: id,
+        committee: { organizationId: existing.organizationId },
+      },
+    })
+  }
+
   await writeAuditLog(prisma, {
     actorId: session.user.id,
     action: "USER_UPDATED",

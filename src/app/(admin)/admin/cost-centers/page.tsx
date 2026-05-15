@@ -1,13 +1,24 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Loader2, Plus, Save, Trash2, Building2, Users as UsersIcon,
-  Power, UserPlus, X, ChevronDown, ChevronRight, Upload, FolderOpen, HardDrive,
+  Power, UserPlus, X, ChevronDown, ChevronRight, Upload, FolderOpen, HardDrive, ShieldCheck, Banknote,
 } from "lucide-react"
 import { toast } from "sonner"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog"
+import { type InviteRole } from "@/lib/parse-csv"
 
 const STATUS_CLASSES = {
   ACTIVE: "bg-green-100 text-green-700",
@@ -47,21 +58,7 @@ type UserRow = {
   organizationId: string | null
 }
 
-const ROLES = ["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN"] as const
-type Role = typeof ROLES[number]
-
-function parseCSV(text: string): { email: string; role: Role; phone?: string }[] {
-  const lines = text.trim().split("\n").filter(Boolean)
-  const results: { email: string; role: Role; phone?: string }[] = []
-  for (const line of lines) {
-    if (line.startsWith("#") || line.toLowerCase().startsWith("email")) continue
-    const [email, role, phone] = line.split(",").map((s) => s.trim())
-    if (!email || !email.includes("@")) continue
-    const validRole = ROLES.includes((role?.toUpperCase() ?? "") as Role) ? (role.toUpperCase() as Role) : "EMPLOYEE"
-    results.push({ email, role: validRole, phone: phone || undefined })
-  }
-  return results
-}
+type DriveStatus = { connected: boolean; rootFolderUrl: string | null }
 
 type DriveStatus = { connected: boolean; rootFolderUrl: string | null }
 
@@ -73,19 +70,8 @@ export default function CostCentersPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [drive, setDrive] = useState<DriveStatus>({ connected: false, rootFolderUrl: null })
 
-  // Bulk upload — scoped to a specific cost center
-  const [bulkOpen, setBulkOpen] = useState(false)
-  const [bulkCostCenter, setBulkCostCenter] = useState<CostCenter | null>(null)
-  const [csvText, setCsvText] = useState("")
-  const [parsed, setParsed] = useState<{ email: string; role: Role; phone?: string }[]>([])
-  const [sending, setSending] = useState(false)
-  const [results, setResults] = useState<{ email: string; status: string; link?: string }[]>([])
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  const [bulkTab, setBulkTab] = useState<"csv" | "sheets">("csv")
-  const [sheetsUrl, setSheetsUrl] = useState("")
-  const [sheetsLoading, setSheetsLoading] = useState(false)
-  const [sheetsError, setSheetsError] = useState("")
+  // Delete cost center confirmation
+  const [deleteCC, setDeleteCC] = useState<CostCenter | null>(null)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -127,7 +113,7 @@ export default function CostCentersPage() {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        alert(err?.error ?? "Save failed")
+        toast.error(err?.error ?? "Save failed")
       } else {
         await fetchAll()
       }
@@ -135,92 +121,17 @@ export default function CostCentersPage() {
   }
 
   async function remove(cc: CostCenter) {
-    if (cc._count.users > 0) {
-      if (!confirm(`Delete "${cc.name}"? ${cc._count.users} user(s) will revert to the org base currency.`)) return
-    } else if (!confirm(`Delete "${cc.name}"?`)) return
     setBusy(cc.id)
+    setDeleteCC(null)
     try {
       const res = await fetch(`/api/admin/cost-centers/${cc.id}`, { method: "DELETE" })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        alert(err?.error ?? "Delete failed")
+        toast.error(err?.error ?? "Delete failed")
       } else {
         await fetchAll()
       }
     } finally { setBusy(null) }
-  }
-
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string
-      setCsvText(text)
-      setParsed(parseCSV(text))
-    }
-    reader.readAsText(file)
-  }
-
-  useEffect(() => {
-    if (csvText) setParsed(parseCSV(csvText))
-  }, [csvText])
-
-  async function fetchFromSheets() {
-    if (!sheetsUrl.trim()) return
-    setSheetsLoading(true)
-    setSheetsError("")
-    try {
-      const res = await fetch("/api/admin/google-sheets-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: sheetsUrl.trim() }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setSheetsError(data.error ?? "Failed to fetch sheet")
-        return
-      }
-      const rows = data.rows as { email: string; role: Role; phone?: string; name?: string }[]
-      const csvLines = rows.map((r) => `${r.email},${r.role}${r.phone ? `,${r.phone}` : ""}`).join("\n")
-      setCsvText(csvLines)
-      setParsed(rows.map((r) => ({ email: r.email, role: r.role, phone: r.phone })))
-      setBulkTab("csv")
-      toast.success(`${rows.length} row${rows.length !== 1 ? "s" : ""} imported from Google Sheet`)
-    } finally {
-      setSheetsLoading(false)
-    }
-  }
-
-  async function handleBulkSend() {
-    if (parsed.length === 0) { toast.error("No valid rows to send"); return }
-    setSending(true)
-    setResults([])
-    const res = await fetch("/api/admin/invitations/bulk", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ invites: parsed, costCenterId: bulkCostCenter?.id }),
-    })
-    const data = await res.json()
-    setSending(false)
-    if (res.ok) {
-      setResults(data.results)
-      const sent = data.results.filter((r: { status: string }) => r.status === "invited").length
-      toast.success(`${sent} invitation${sent !== 1 ? "s" : ""} sent`)
-    } else {
-      toast.error(data.error ?? "Failed to send invitations")
-    }
-  }
-
-  function openBulkFor(cc: CostCenter) {
-    setBulkCostCenter(cc)
-    setCsvText("")
-    setParsed([])
-    setResults([])
-    setBulkTab("csv")
-    setSheetsUrl("")
-    setSheetsError("")
-    setBulkOpen(true)
   }
 
   return (
@@ -230,8 +141,7 @@ export default function CostCentersPage() {
           <h1 className="text-2xl font-bold text-gray-900">User Cost Center</h1>
           <p className="text-sm text-gray-500 mt-1 max-w-2xl">
             Each cost center is a regional office with its own currency. Employees are managed directly under
-            their cost center. Approver and Finance roles are assigned in{" "}
-            <a href="/admin/config" className="underline text-blue-600 hover:text-blue-800">Configuration</a>.
+            their cost center. Approver and Finance roles can be assigned below.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -288,13 +198,14 @@ export default function CostCentersPage() {
               busy={busy === cc.id}
               driveConnected={drive.connected}
               onSave={(patch) => save(cc.id, patch)}
-              onDelete={() => remove(cc)}
+              onDelete={() => setDeleteCC(cc)}
               onRefresh={fetchAll}
-              onBulkUpload={() => openBulkFor(cc)}
             />
           ))}
         </div>
       )}
+
+      <RoleAssignmentsSection users={users} onRefresh={fetchAll} />
 
       <UnassignedUsers
         users={users.filter((u) => !u.costCenterId && u.role === "EMPLOYEE")}
@@ -302,152 +213,183 @@ export default function CostCentersPage() {
         onAssigned={fetchAll}
       />
 
-      {/* Bulk Upload Dialog — scoped to a specific cost center */}
-      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              Bulk Invite Users
-              {bulkCostCenter && (
-                <span className="ml-2 font-normal text-sm text-gray-500">
-                  — <span className="font-mono text-xs text-gray-400">{bulkCostCenter.code}</span>{" "}
-                  {bulkCostCenter.name}
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit">
-              <button
-                onClick={() => setBulkTab("csv")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  bulkTab === "csv" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                CSV / Paste
-              </button>
-              <button
-                onClick={() => setBulkTab("sheets")}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1 ${
-                  bulkTab === "sheets" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                <svg className="h-3.5 w-3.5 text-green-600" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/>
-                </svg>
-                Google Sheet
-              </button>
-            </div>
-
-            {bulkTab === "sheets" ? (
-              <div className="space-y-3">
-                <div className="bg-green-50 rounded-lg p-3 text-xs text-green-700 space-y-1">
-                  <p className="font-medium">Google Sheet requirements:</p>
-                  <p>• Sheet must be shared as <strong>"Anyone with the link can view"</strong></p>
-                  <p>• Columns: <code className="font-mono bg-green-100 px-1 rounded">email, role, phone (optional)</code></p>
-                  <p>• Or: <code className="font-mono bg-green-100 px-1 rounded">name, email, role, phone (optional)</code></p>
-                  <p>• Roles: EMPLOYEE, APPROVER, FINANCE, ADMIN</p>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-gray-700">Google Sheets URL</label>
-                  <input
-                    type="url"
-                    value={sheetsUrl}
-                    onChange={(e) => { setSheetsUrl(e.target.value); setSheetsError("") }}
-                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  />
-                  {sheetsError && <p className="text-xs text-red-600">{sheetsError}</p>}
-                </div>
-                <button
-                  onClick={fetchFromSheets}
-                  disabled={sheetsLoading || !sheetsUrl.trim()}
-                  className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  {sheetsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/>
-                    </svg>
-                  )}
-                  {sheetsLoading ? "Fetching…" : "Import from Sheet"}
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700 space-y-1">
-                  <p className="font-medium">CSV format:</p>
-                  <code className="block font-mono">email,role,phone (optional)</code>
-                  <code className="block font-mono text-gray-500">john@company.com,EMPLOYEE,+628123456789</code>
-                  <code className="block font-mono text-gray-500">sarah@company.com,APPROVER</code>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-colors"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload CSV file
-                  </button>
-                  <span className="text-xs text-gray-400">or paste below</span>
-                  <input ref={fileRef} type="file" accept=".csv,.txt" className="sr-only" onChange={handleFileUpload} />
-                </div>
-
-                <textarea
-                  value={csvText}
-                  onChange={(e) => setCsvText(e.target.value)}
-                  className="w-full h-32 text-xs font-mono border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
-                  placeholder={"email,role\njohn@company.com,EMPLOYEE\nsarah@company.com,APPROVER"}
-                />
-              </>
-            )}
-
-            {parsed.length > 0 && (
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs font-medium text-gray-600 mb-2">{parsed.length} user{parsed.length !== 1 ? "s" : ""} parsed:</p>
-                <div className="max-h-32 overflow-y-auto space-y-1">
-                  {parsed.map((p, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-800">{p.email}</span>
-                      <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px]">{p.role}</span>
-                      {p.phone && <span className="text-gray-400">{p.phone}</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {results.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-gray-600">Results:</p>
-                <div className="max-h-32 overflow-y-auto space-y-1">
-                  {results.map((r, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className={r.status === "invited" ? "text-green-600" : "text-gray-400"}>
-                        {r.status === "invited" ? "✓" : "—"}
-                      </span>
-                      <span>{r.email}</span>
-                      {r.status === "skipped" && <span className="text-gray-400">(already exists)</span>}
-                      {r.link && (
-                        <button onClick={() => { navigator.clipboard.writeText(r.link!); toast.success("Copied!") }} className="text-blue-500 hover:underline">
-                          copy link
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkOpen(false)}>Close</Button>
-            <Button onClick={handleBulkSend} disabled={sending || parsed.length === 0}>
-              {sending ? "Sending..." : `Send ${parsed.length > 0 ? parsed.length : ""} Invite${parsed.length !== 1 ? "s" : ""}`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Delete cost center AlertDialog */}
+      <AlertDialog open={!!deleteCC} onOpenChange={(open) => { if (!open) setDeleteCC(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete cost center?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCC && deleteCC._count.users > 0
+                ? `"${deleteCC.name}" has ${deleteCC._count.users} user(s). They will revert to the org base currency.`
+                : `Are you sure you want to delete "${deleteCC?.name}"? This cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteCC(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => { if (deleteCC) remove(deleteCC) }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  )
+}
+
+function RoleAssignmentsSection({
+  users,
+  onRefresh,
+}: {
+  users: UserRow[]
+  onRefresh: () => void
+}) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [addApprover, setAddApprover] = useState("")
+  const [addFinance, setAddFinance] = useState("")
+
+  const approvers = useMemo(() => users.filter((u) => u.role === "APPROVER"), [users])
+  const financeUsers = useMemo(() => users.filter((u) => u.role === "FINANCE"), [users])
+  const employees = useMemo(() => users.filter((u) => u.role === "EMPLOYEE"), [users])
+
+  async function changeRole(userId: string, role: string) {
+    setBusy(userId)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      })
+      if (res.ok) {
+        toast.success("Role updated")
+        onRefresh()
+      } else {
+        const err = await res.json().catch(() => null)
+        toast.error(err?.error ?? "Failed to update role")
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Role Assignments</CardTitle>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Promote employees to Approver or Finance Officer roles. These users will be available for workflow assignment in Configuration.
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-6 md:grid-cols-2">
+        {/* Approvers */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-semibold text-gray-800">Approvers</span>
+          </div>
+          {approvers.length === 0 ? (
+            <p className="text-xs text-gray-400">No approvers assigned.</p>
+          ) : (
+            <ul className="space-y-1">
+              {approvers.map((u) => (
+                <li key={u.id} className="flex items-center justify-between rounded-md bg-blue-50 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
+                    <p className="text-[11px] text-gray-500">{u.email}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                    disabled={busy === u.id}
+                    onClick={() => changeRole(u.id, "EMPLOYEE")}
+                    title="Remove approver role"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <select
+              value={addApprover}
+              onChange={(e) => setAddApprover(e.target.value)}
+              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+            >
+              <option value="">Promote employee to approver…</option>
+              {employees.map((u) => (
+                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={!addApprover || !!busy}
+              onClick={() => { changeRole(addApprover, "APPROVER"); setAddApprover("") }}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Finance Officers */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Banknote className="h-4 w-4 text-green-600" />
+            <span className="text-sm font-semibold text-gray-800">Finance Officers</span>
+          </div>
+          {financeUsers.length === 0 ? (
+            <p className="text-xs text-gray-400">No finance officers assigned.</p>
+          ) : (
+            <ul className="space-y-1">
+              {financeUsers.map((u) => (
+                <li key={u.id} className="flex items-center justify-between rounded-md bg-green-50 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-800">{u.name ?? "—"}</p>
+                    <p className="text-[11px] text-gray-500">{u.email}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                    disabled={busy === u.id}
+                    onClick={() => changeRole(u.id, "EMPLOYEE")}
+                    title="Remove finance role"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <select
+              value={addFinance}
+              onChange={(e) => setAddFinance(e.target.value)}
+              className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+            >
+              <option value="">Promote employee to finance…</option>
+              {employees.map((u) => (
+                <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={!addFinance || !!busy}
+              onClick={() => { changeRole(addFinance, "FINANCE"); setAddFinance("") }}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -459,7 +401,6 @@ function CostCenterCard({
   onSave,
   onDelete,
   onRefresh,
-  onBulkUpload,
 }: {
   cc: CostCenter
   users: UserRow[]
@@ -468,7 +409,6 @@ function CostCenterCard({
   onSave: (patch: Partial<CostCenter>) => void
   onDelete: () => void
   onRefresh: () => void
-  onBulkUpload: () => void
 }) {
   const [draft, setDraft] = useState({ name: cc.name, countryCode: cc.countryCode, currency: cc.currency, active: cc.active })
   useEffect(() => setDraft({ name: cc.name, countryCode: cc.countryCode, currency: cc.currency, active: cc.active }), [cc])
@@ -478,15 +418,16 @@ function CostCenterCard({
   const [addingMember, setAddingMember] = useState(false)
   const [editMember, setEditMember] = useState<UserRow | null>(null)
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
+  const [userToDelete, setUserToDelete] = useState<UserRow | null>(null)
 
   async function deleteUser(u: UserRow) {
-    if (!confirm(`Delete ${u.name ?? u.email}? This cannot be undone.`)) return
+    setUserToDelete(null)
     setDeletingUser(u.id)
     try {
       const res = await fetch(`/api/admin/users/${u.id}`, { method: "DELETE" })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        alert(err?.error ?? "Delete failed")
+        toast.error(err?.error ?? "Delete failed")
       } else {
         onRefresh()
       }
@@ -586,12 +527,6 @@ function CostCenterCard({
           </button>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={onBulkUpload}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-            >
-              <Upload className="h-3 w-3" /> Bulk Upload
-            </button>
-            <button
               onClick={() => { setAddingMember(true); setMembersOpen(true) }}
               className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
             >
@@ -670,7 +605,7 @@ function CostCenterCard({
                                   Edit
                                 </button>
                                 <button
-                                  onClick={() => deleteUser(u)}
+                                  onClick={() => setUserToDelete(u)}
                                   disabled={deletingUser === u.id}
                                   className="rounded p-1.5 text-red-400 border border-red-200 hover:bg-red-50 disabled:opacity-50"
                                   title="Delete user"
@@ -690,14 +625,36 @@ function CostCenterCard({
           </div>
         )}
       </div>
+
+      {/* Delete user AlertDialog */}
+      <AlertDialog open={!!userToDelete} onOpenChange={(open) => { if (!open) setUserToDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete {userToDelete?.name ?? userToDelete?.email}? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setUserToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => { if (userToDelete) deleteUser(userToDelete) }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </article>
   )
 }
 
 function AddMemberForm({ costCenterId, onCancel, onSaved }: { costCenterId: string; onCancel: () => void; onSaved: () => void }) {
+  const ROLES = ["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN"] as const
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
-  const [role, setRole] = useState<Role>("EMPLOYEE")
+  const [role, setRole] = useState<InviteRole>("EMPLOYEE")
   const [busy, setBusy] = useState(false)
 
   async function send() {
@@ -745,7 +702,7 @@ function AddMemberForm({ costCenterId, onCancel, onSaved }: { costCenterId: stri
         />
         <select
           value={role}
-          onChange={(e) => setRole(e.target.value as Role)}
+          onChange={(e) => setRole(e.target.value as InviteRole)}
           className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
         >
           {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -783,6 +740,7 @@ function EditMemberRow({ user, driveConnected, onCancel, onSaved, onRemove }: {
   const [busy, setBusy] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [folderId, setFolderId] = useState(user.driveFolderId)
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   async function save() {
     setBusy(true)
@@ -799,7 +757,7 @@ function EditMemberRow({ user, driveConnected, onCancel, onSaved, onRemove }: {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        alert(err?.error ?? "Save failed")
+        toast.error(err?.error ?? "Save failed")
       } else {
         onSaved()
       }
@@ -809,7 +767,7 @@ function EditMemberRow({ user, driveConnected, onCancel, onSaved, onRemove }: {
   }
 
   async function removeFromCenter() {
-    if (!confirm(`Remove ${user.name ?? user.email} from this cost center?`)) return
+    setConfirmRemove(false)
     setBusy(true)
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, {
@@ -819,7 +777,7 @@ function EditMemberRow({ user, driveConnected, onCancel, onSaved, onRemove }: {
       })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        alert(err?.error ?? "Failed")
+        toast.error(err?.error ?? "Failed")
       } else {
         onRemove()
       }
@@ -845,87 +803,107 @@ function EditMemberRow({ user, driveConnected, onCancel, onSaved, onRemove }: {
   }
 
   return (
-    <div className="my-1 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
-      <div className="grid gap-2 sm:grid-cols-4">
-        <input
-          placeholder="Full name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
-        />
-        <input
-          placeholder="Department"
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
-        />
-        <div>
-          <label className="block text-[10px] text-gray-500 mb-0.5">Hire Date</label>
+    <>
+      <div className="my-1 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
+        <div className="grid gap-2 sm:grid-cols-4">
           <input
-            type="date"
-            value={hireDate}
-            onChange={(e) => setHireDate(e.target.value)}
-            className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+            placeholder="Full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
           />
+          <input
+            placeholder="Department"
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+          />
+          <div>
+            <label className="block text-[10px] text-gray-500 mb-0.5">Hire Date</label>
+            <input
+              type="date"
+              value={hireDate}
+              onChange={(e) => setHireDate(e.target.value)}
+              className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+            />
+          </div>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE" | "PENDING")}
+            className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
+          >
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+            <option value="PENDING">Pending</option>
+          </select>
         </div>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE" | "PENDING")}
-          className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs"
-        >
-          <option value="ACTIVE">Active</option>
-          <option value="INACTIVE">Inactive</option>
-          <option value="PENDING">Pending</option>
-        </select>
-      </div>
 
-      {/* Drive folder row */}
-      <div className="mt-2 flex items-center gap-2">
-        {folderId ? (
-          <a
-            href={`https://drive.google.com/drive/folders/${folderId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-green-700 hover:underline"
-          >
-            <FolderOpen className="h-3 w-3" /> Open Drive folder
-          </a>
-        ) : driveConnected ? (
-          <button
-            onClick={createDriveFolder}
-            disabled={creatingFolder}
-            className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-50"
-          >
-            {creatingFolder ? <Loader2 className="h-3 w-3 animate-spin" /> : <HardDrive className="h-3 w-3" />}
-            {creatingFolder ? "Creating…" : "Create Drive folder"}
-          </button>
-        ) : (
-          <span className="text-[11px] text-gray-400">Connect Google Drive to manage employee folders</span>
-        )}
-      </div>
+        {/* Drive folder row */}
+        <div className="mt-2 flex items-center gap-2">
+          {folderId ? (
+            <a
+              href={`https://drive.google.com/drive/folders/${folderId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-green-700 hover:underline"
+            >
+              <FolderOpen className="h-3 w-3" /> Open Drive folder
+            </a>
+          ) : driveConnected ? (
+            <button
+              onClick={createDriveFolder}
+              disabled={creatingFolder}
+              className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 disabled:opacity-50"
+            >
+              {creatingFolder ? <Loader2 className="h-3 w-3 animate-spin" /> : <HardDrive className="h-3 w-3" />}
+              {creatingFolder ? "Creating…" : "Create Drive folder"}
+            </button>
+          ) : (
+            <span className="text-[11px] text-gray-400">Connect Google Drive to manage employee folders</span>
+          )}
+        </div>
 
-      <div className="mt-2 flex items-center justify-between">
-        <button
-          onClick={removeFromCenter}
-          disabled={busy}
-          className="text-[11px] text-red-500 hover:text-red-700 disabled:opacity-50"
-        >
-          Remove from center
-        </button>
-        <div className="flex gap-2">
-          <button onClick={onCancel} className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs hover:bg-gray-50">
-            <X className="h-3 w-3" />
-          </button>
+        <div className="mt-2 flex items-center justify-between">
           <button
-            onClick={save}
+            onClick={() => setConfirmRemove(true)}
             disabled={busy}
-            className="inline-flex items-center gap-1 rounded-md bg-[#0B1E3F] px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+            className="text-[11px] text-red-500 hover:text-red-700 disabled:opacity-50"
           >
-            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+            Remove from center
           </button>
+          <div className="flex gap-2">
+            <button onClick={onCancel} className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs hover:bg-gray-50">
+              <X className="h-3 w-3" />
+            </button>
+            <button
+              onClick={save}
+              disabled={busy}
+              className="inline-flex items-center gap-1 rounded-md bg-[#0B1E3F] px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Remove from center AlertDialog */}
+      <AlertDialog open={confirmRemove} onOpenChange={(open) => { if (!open) setConfirmRemove(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from cost center?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove {user.name ?? user.email} from this cost center? They will become unassigned.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmRemove(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={removeFromCenter}>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -946,7 +924,7 @@ function NewCostCenterCard({ onCancel, onSaved }: { onCancel: () => void; onSave
       })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        alert(err?.error ?? "Create failed")
+        toast.error(err?.error ?? "Create failed")
       } else { onSaved() }
     } finally { setBusy(false) }
   }
@@ -1024,7 +1002,7 @@ function UnassignedUsers({
       })
       if (!res.ok) {
         const err = await res.json().catch(() => null)
-        alert(err?.error ?? "Assign failed")
+        toast.error(err?.error ?? "Assign failed")
       } else {
         onAssigned()
       }

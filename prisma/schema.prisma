@@ -195,6 +195,7 @@ model Organization {
   users     User[]
   invitations UserInvitation[]
   configs   AdminConfig[]
+  approvalCommittees ApprovalCommittee[] @relation("OrgApprovalCommittees")
   leaveTypes      LeaveType[]
   leaveRequests   LeaveRequest[]
   publicHolidays  PublicHoliday[]
@@ -237,6 +238,7 @@ model CostCenter {
   compensations  EmployeeCompensation[] @relation("CostCenterCompensations")
   payslips       Payslip[] @relation("CostCenterPayslips")
   adminConfigs   AdminConfig[] @relation("AdminConfigCostCenter")
+  approvalCommittees ApprovalCommittee[] @relation("CCApprovalCommittees")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -297,6 +299,7 @@ model User {
   workLocationLogs     WorkLocationLog[]
   leaveBalanceAdjustments     LeaveBalanceAdjustment[] @relation("EmployeeAdj")
   leaveBalanceAdjustmentsMade LeaveBalanceAdjustment[] @relation("AdjGrantedBy")
+  committeeMemberships ApprovalCommitteeMember[] @relation("UserCommitteeMemberships")
 }
 
 model ReimbursementRequest {
@@ -398,6 +401,34 @@ model AdminConfig {
 
   @@unique([key, organizationId, costCenterId], map: "AdminConfig_key_org_cc_key")
   @@index([key, organizationId])
+}
+
+model ApprovalCommittee {
+  id             String   @id @default(cuid())
+  organizationId String?
+  costCenterId   String?
+  mode           String   @default("sequential")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization?             @relation("OrgApprovalCommittees", fields: [organizationId], references: [id], onDelete: Cascade)
+  costCenter     CostCenter?               @relation("CCApprovalCommittees", fields: [costCenterId], references: [id], onDelete: Cascade)
+  members        ApprovalCommitteeMember[]
+
+  @@unique([organizationId, costCenterId])
+}
+
+model ApprovalCommitteeMember {
+  id          String   @id @default(cuid())
+  committeeId String
+  userId      String
+  order       Int      @default(0)
+
+  committee   ApprovalCommittee @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+  user        User               @relation("UserCommitteeMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([committeeId, userId])
+  @@index([committeeId, order])
 }
 
 model MonthlyReport {
