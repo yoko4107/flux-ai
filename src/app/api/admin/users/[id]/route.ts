@@ -5,14 +5,19 @@ import { writeAuditLog } from "@/lib/audit"
 import { z } from "zod"
 
 const patchUserSchema = z.object({
+  name: z.string().nullable().optional(),
   role: z.enum(["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN", "SUPER_ADMIN"] as const).optional(),
   status: z.enum(["ACTIVE", "INACTIVE", "PENDING"] as const).optional(),
   department: z.string().nullable().optional(),
+  hireDate: z.string().nullable().optional(),
   managerId: z.string().nullable().optional(),
   organizationId: z.string().nullable().optional(),
-  // Regional cost center — drives the user's reimbursement payout currency.
-  // null clears the assignment (falls through to org base).
   costCenterId: z.string().nullable().optional(),
+  // HR profile fields — stored on UserProfile (upserted if missing)
+  jobTitle: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  employmentStartDate: z.string().nullable().optional(), // ISO date string
+  employmentEndDate: z.string().nullable().optional(),   // ISO date string
 })
 
 export async function PATCH(
@@ -54,7 +59,8 @@ export async function PATCH(
     return NextResponse.json({ error: "User not found" }, { status: 404 })
   }
 
-  const { role, status, department, managerId, organizationId, costCenterId } = parsed.data
+  const { name, role, status, department, hireDate, managerId, organizationId, costCenterId,
+          jobTitle, phone, employmentStartDate, employmentEndDate } = parsed.data
 
   // If the caller is trying to assign a cost center, make sure it belongs
   // to the target user's org (or the caller's org for non-super-admins).
@@ -69,15 +75,34 @@ export async function PATCH(
     }
   }
 
+  // Build profile patch if any HR fields were sent
+  const hasProfileUpdate = jobTitle !== undefined || phone !== undefined ||
+    employmentStartDate !== undefined || employmentEndDate !== undefined
+  const profileData = hasProfileUpdate ? {
+    ...(jobTitle !== undefined ? { jobTitle } : {}),
+    ...(phone !== undefined ? { phone } : {}),
+    ...(employmentStartDate !== undefined
+      ? { employmentStartDate: employmentStartDate ? new Date(employmentStartDate) : null }
+      : {}),
+    ...(employmentEndDate !== undefined
+      ? { employmentEndDate: employmentEndDate ? new Date(employmentEndDate) : null }
+      : {}),
+  } : undefined
+
   const user = await prisma.user.update({
     where: { id },
     data: {
+      ...(name !== undefined ? { name } : {}),
       ...(role !== undefined ? { role } : {}),
       ...(status !== undefined ? { status } : {}),
       ...(department !== undefined ? { department } : {}),
+      ...(hireDate !== undefined ? { hireDate: hireDate ? new Date(hireDate) : null } : {}),
       ...(managerId !== undefined ? { managerId } : {}),
       ...(organizationId !== undefined ? { organizationId } : {}),
       ...(costCenterId !== undefined ? { costCenterId } : {}),
+      ...(profileData ? {
+        profile: { upsert: { create: profileData, update: profileData } },
+      } : {}),
     },
     select: {
       id: true,
@@ -86,6 +111,8 @@ export async function PATCH(
       role: true,
       status: true,
       department: true,
+      hireDate: true,
+      driveFolderId: true,
       managerId: true,
       organizationId: true,
       costCenterId: true,
@@ -93,9 +120,22 @@ export async function PATCH(
       manager: { select: { name: true } },
       organization: { select: { id: true, name: true } },
       costCenter: { select: { id: true, code: true, name: true, currency: true, countryCode: true } },
+      profile: { select: { jobTitle: true, employmentStartDate: true, employmentEndDate: true, phone: true } },
       _count: { select: { requests: true } },
     },
   })
+
+  // Cascade: remove from approval committee memberships when demoting from APPROVER/ADMIN
+  const wasApprover = existing.role === "APPROVER" || existing.role === "ADMIN"
+  const becomingNonApprover = role && role !== "APPROVER" && role !== "ADMIN"
+  if (wasApprover && becomingNonApprover && existing.organizationId) {
+    await prisma.approvalCommitteeMember.deleteMany({
+      where: {
+        userId: id,
+        committee: { organizationId: existing.organizationId },
+      },
+    })
+  }
 
   await writeAuditLog(prisma, {
     actorId: session.user.id,

@@ -1,9 +1,8 @@
 import type { PrismaClient } from "@/generated/prisma"
-import { getConfig } from "@/lib/config"
 
 /**
  * Resolve the approval committee for a given org + cost center.
- * Three-tier precedence via getConfig:
+ * Three-tier precedence via ApprovalCommittee table:
  *   1. CC-specific committee (when costCenterId given)
  *   2. Org-wide committee fallback
  *   3. Global fallback
@@ -13,13 +12,25 @@ export async function resolveCommittee(
   orgId: string | null | undefined,
   costCenterId: string | null | undefined,
 ): Promise<{ mode?: string; approvers?: string[] } | null> {
-  const value = (await getConfig(
-    prisma,
-    "approvalCommittee",
-    orgId,
-    costCenterId,
-  )) as { mode?: string; approvers?: string[] } | null
-  return value ?? null
+  // Build tier list: CC-specific → org-wide → global
+  const tiers: Array<{ organizationId: string | null; costCenterId: string | null }> = []
+  if (orgId && costCenterId) tiers.push({ organizationId: orgId, costCenterId })
+  if (orgId) tiers.push({ organizationId: orgId, costCenterId: null })
+  tiers.push({ organizationId: null, costCenterId: null })
+
+  for (const where of tiers) {
+    const committee = await prisma.approvalCommittee.findFirst({
+      where,
+      include: { members: { orderBy: { order: "asc" } } },
+    })
+    if (committee) {
+      return {
+        mode: committee.mode,
+        approvers: committee.members.map((m: { userId: string }) => m.userId),
+      }
+    }
+  }
+  return null
 }
 
 /**

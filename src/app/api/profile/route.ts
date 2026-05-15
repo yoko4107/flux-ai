@@ -15,6 +15,8 @@ export async function GET() {
       email: true,
       role: true,
       department: true,
+      phone: true,
+      emailAliases: true,
       status: true,
       kycVerified: true,
       createdAt: true,
@@ -27,9 +29,16 @@ export async function GET() {
   return NextResponse.json(user)
 }
 
+const emailAliasSchema = z.object({
+  type: z.enum(["work", "personal"]),
+  email: z.string().email(),
+})
+
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
   department: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  emailAliases: z.array(emailAliasSchema).max(10).optional().nullable(),
   notificationPrefs: z
     .object({
       email: z.boolean(),
@@ -57,10 +66,12 @@ export async function PUT(request: Request) {
     data: {
       ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
       ...(parsed.data.department !== undefined ? { department: parsed.data.department } : {}),
+      ...(parsed.data.phone !== undefined ? { phone: parsed.data.phone } : {}),
+      ...(parsed.data.emailAliases !== undefined ? { emailAliases: parsed.data.emailAliases ?? [] } : {}),
       ...(parsed.data.notificationPrefs !== undefined ? { notificationPrefs: parsed.data.notificationPrefs } : {}),
     },
     select: {
-      id: true, name: true, department: true, notificationPrefs: true,
+      id: true, name: true, department: true, phone: true, emailAliases: true, notificationPrefs: true,
     },
   })
 

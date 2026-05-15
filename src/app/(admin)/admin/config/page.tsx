@@ -13,7 +13,6 @@ import type { CustomCategory } from "@/lib/custom-categories"
 
 type PerDiemRate = { standard: number; highCost?: number; highCostCities?: string[] }
 type PerDiemRateTable = Record<string, PerDiemRate>
-type PerDiemCostCenter = { id: string; code: string; name: string; currency: string; countryCode: string }
 
 // Types
 interface UserOption {
@@ -1324,33 +1323,34 @@ export default function AdminConfigPage() {
         </div>
       </SectionCard>
 
-      {/* 8. Role Assignments (org-wide) */}
-      <p className="text-xs text-gray-500 mb-2">
-        Role promotions apply org-wide — not scoped to the selected cost center.
-      </p>
-      <RoleAssignmentsCard users={users} onChanged={() => loadData(selectedCC?.id ?? null)} />
+      {/* 8. Role Assignments moved to Cost Centers page */}
+      <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+        Role assignments (Approvers, Finance Officers) are managed in{" "}
+        <a href="/admin/cost-centers" className="font-medium underline hover:text-blue-900">
+          User Cost Centers
+        </a>.
+      </div>
 
       {/* 9. Per Diem Rates */}
-      <PerDiemSection />
+      <PerDiemSection selectedCC={selectedCC} />
     </div>
   )
 }
 
-function PerDiemSection() {
+function PerDiemSection({ selectedCC }: { selectedCC: { id: string; code: string; name: string; currency: string; countryCode: string } | null }) {
   const [rates, setRates] = useState<PerDiemRateTable>({})
   const [isOverride, setIsOverride] = useState(false)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [scope, setScope] = useState<string>("")
-  const [costCenters, setCostCenters] = useState<PerDiemCostCenter[]>([])
+  const [newCountryCode, setNewCountryCode] = useState("")
+  const [newCountryError, setNewCountryError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const qs = scope ? `?costCenterId=${scope}` : ""
+    const qs = selectedCC?.id ? `?costCenterId=${selectedCC.id}` : ""
     const data = await fetch(`/api/per-diem/admin/rates${qs}`).then((r) => r.json())
     setRates(data.rates ?? {})
     setIsOverride(!!data.isOverride)
-    setCostCenters(data.costCenters ?? [])
-  }, [scope])
+  }, [selectedCC?.id])
 
   useEffect(() => { load() }, [load])
 
@@ -1361,10 +1361,18 @@ function PerDiemSection() {
     setRates((prev) => { const next = { ...prev }; delete next[cc]; return next })
   }
   function addCountry() {
-    const cc = (prompt("Country ISO-2 code (e.g. JP, MY, TH):") || "").trim().toUpperCase()
-    if (!cc.match(/^[A-Z]{2}$/)) { if (cc) alert("Code must be 2 uppercase letters (ISO-3166-1 alpha-2)."); return }
-    if (rates[cc]) { alert(`${cc} already exists — edit it directly.`); return }
+    const cc = newCountryCode.trim().toUpperCase()
+    if (!cc.match(/^[A-Z]{2}$/)) {
+      setNewCountryError("Must be a 2-letter ISO country code (e.g. JP, MY)")
+      return
+    }
+    if (rates[cc]) {
+      setNewCountryError(`${cc} already exists — edit it directly`)
+      return
+    }
+    setNewCountryError(null)
     setCountry(cc, { standard: 100 })
+    setNewCountryCode("")
   }
 
   async function save() {
@@ -1373,7 +1381,7 @@ function PerDiemSection() {
       const res = await fetch("/api/per-diem/admin/rates", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rates, costCenterId: scope || null }),
+        body: JSON.stringify({ rates, costCenterId: selectedCC?.id ?? null }),
       })
       if (res.ok) { setSaved(true); load() }
       else toast.error("Failed to save per diem rates")
@@ -1381,13 +1389,11 @@ function PerDiemSection() {
   }
 
   async function reset() {
-    const target = scope
-      ? costCenters.find((c) => c.id === scope)?.name ?? "this cost center"
-      : "the org-wide bucket"
+    const target = selectedCC?.name ?? "this cost center"
     if (!confirm(`Remove the override for ${target}? Rates fall back to the parent layer / built-in defaults.`)) return
     setBusy(true)
     try {
-      const qs = scope ? `?costCenterId=${scope}` : ""
+      const qs = selectedCC?.id ? `?costCenterId=${selectedCC.id}` : ""
       await fetch(`/api/per-diem/admin/rates${qs}`, { method: "DELETE" })
       load()
     } finally { setBusy(false) }
@@ -1413,28 +1419,10 @@ function PerDiemSection() {
       <CardContent className="space-y-4">
         <div className="rounded-xl border border-gray-200">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-3">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-sm font-semibold text-gray-900">Country rates</h2>
-              <label className="text-xs text-gray-500">
-                Scope
-                <select
-                  value={scope}
-                  onChange={(e) => setScope(e.target.value)}
-                  className="ml-2 rounded border border-gray-300 px-2 py-1 text-xs"
-                >
-                  <option value="">Org-wide bucket</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <button onClick={addCountry} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">
-              <Plus className="h-3.5 w-3.5" /> Add country
-            </button>
+            <h2 className="text-sm font-semibold text-gray-900">Country rates</h2>
           </div>
           {entries.length === 0 ? (
-            <div className="p-12 text-center text-sm text-gray-500">No rates configured. Click <strong>Add country</strong> to start.</div>
+            <div className="p-12 text-center text-sm text-gray-500">No rates configured. Add a country below to start.</div>
           ) : (
             <div className="divide-y divide-gray-100">
               {entries.map(([cc, r]) => (
@@ -1448,6 +1436,26 @@ function PerDiemSection() {
               ))}
             </div>
           )}
+          <div className="border-t border-gray-100 px-5 py-3 space-y-1">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newCountryCode}
+                onChange={(e) => { setNewCountryCode(e.target.value.toUpperCase().slice(0, 2)); setNewCountryError(null) }}
+                placeholder="ISO-2 code (e.g. JP)"
+                maxLength={2}
+                className="w-32 rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm uppercase"
+              />
+              <button
+                onClick={addCountry}
+                disabled={!newCountryCode.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add country
+              </button>
+            </div>
+            {newCountryError && <p className="text-xs text-red-500">{newCountryError}</p>}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={save} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-[#0B1E3F] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">

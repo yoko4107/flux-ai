@@ -34,7 +34,7 @@ export default function AdminLeavePage() {
         <p className="text-sm text-gray-500 mt-1">Holidays, leave types, analytics, email audit log.</p>
       </div>
 
-      {costCenters.length > 0 && (
+      {costCenters.length > 0 && (tab === "balances" || tab === "overtime" || tab === "dashboard" || tab === "audit") && (
         <CostCenterSelector
           costCenters={costCenters}
           selectedCC={selectedCC}
