@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { Shield, Building2, Mail, CheckCircle2, XCircle, Phone, Plus, X } from "lucide-react"
+import { Shield, Building2, Mail, CheckCircle2, XCircle, Phone, Plus, X, Briefcase, CalendarDays, FolderOpen } from "lucide-react"
 
 type NotificationPrefs = {
   email: boolean
@@ -35,10 +35,13 @@ type Profile = {
   emailAliases: EmailAlias[] | null
   status: string
   kycVerified: boolean
+  hireDate: string | null
+  driveFolderId: string | null
   createdAt: string
   notificationPrefs: NotificationPrefs | null
   organization: { id: string; name: string; slug: string } | null
   manager: { id: string; name: string | null; email: string | null } | null
+  profile: { jobTitle: string | null; employmentStartDate: string | null } | null
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
@@ -154,6 +157,11 @@ export default function ProfilePage() {
                   {profile.status.toLowerCase()}
                 </Badge>
               </div>
+              {profile.profile?.jobTitle && (
+                <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <Briefcase className="h-3 w-3" /> {profile.profile.jobTitle}
+                </p>
+              )}
               <CardDescription className="flex items-center gap-1 mt-1">
                 <Mail className="h-3 w-3" /> {profile.email}
               </CardDescription>
@@ -172,7 +180,33 @@ export default function ProfilePage() {
             value={profile.kycVerified ? "Verified" : "Not verified"}
           />
           <InfoRow label="Manager" value={profile.manager?.name ?? "—"} />
-          <InfoRow label="Member since" value={new Date(profile.createdAt).toLocaleDateString()} />
+          <InfoRow
+            icon={<CalendarDays className="h-4 w-4 text-gray-400" />}
+            label="Hired"
+            value={
+              profile.hireDate
+                ? new Date(profile.hireDate).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+                : profile.profile?.employmentStartDate
+                ? new Date(profile.profile.employmentStartDate).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+                : "—"
+            }
+          />
+          {profile.driveFolderId && (
+            <div className="flex items-start gap-2">
+              <FolderOpen className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+              <div>
+                <div className="text-xs text-gray-500">Documents</div>
+                <a
+                  href={`https://drive.google.com/drive/folders/${profile.driveFolderId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-600 hover:underline"
+                >
+                  Open in Drive
+                </a>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
