@@ -476,6 +476,8 @@ model UserProfile {
   dateFormat          String           @default("DD/MM/YYYY")
   weekStartsOn        Int              @default(1)
   jobTitle            String?
+  employmentType      String?          // FULL_TIME | PART_TIME | CONTRACT | INTERN
+  workArrangement     String?          // REMOTE | HYBRID | ON_SITE
   employmentStartDate DateTime?
   employmentEndDate   DateTime?
   phone               String?

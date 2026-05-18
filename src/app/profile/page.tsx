@@ -57,6 +57,8 @@ type Profile = {
   manager: { id: string; name: string | null; email: string | null } | null
   profile: {
     jobTitle: string | null
+    employmentType: string | null
+    workArrangement: string | null
     employmentStartDate: string | null
     emergencyContact: EmergencyContact | null
     socialLinks: SocialLink[] | null
@@ -214,6 +216,16 @@ export default function ProfilePage() {
               {profile.profile?.jobTitle && (
                 <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
                   <Briefcase className="h-3 w-3" /> {profile.profile.jobTitle}
+                  {profile.profile.employmentType && (
+                    <span className="ml-1 text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">
+                      {{ FULL_TIME: "Full-time", PART_TIME: "Part-time", CONTRACT: "Contractor", INTERN: "Intern" }[profile.profile.employmentType] ?? profile.profile.employmentType}
+                    </span>
+                  )}
+                  {profile.profile.workArrangement && (
+                    <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">
+                      {{ REMOTE: "Remote", HYBRID: "Hybrid", ON_SITE: "On-site" }[profile.profile.workArrangement] ?? profile.profile.workArrangement}
+                    </span>
+                  )}
                 </p>
               )}
               <CardDescription className="flex items-center gap-1 mt-1">
