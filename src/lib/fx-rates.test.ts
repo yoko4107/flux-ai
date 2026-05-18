@@ -10,8 +10,7 @@ async function loadModule() {
 
 describe("fx-rates.convert", () => {
   beforeEach(() => {
-    // Default: live feeds always fail. Tests rely on the hardcoded fallback
-    // table that was added to fix the VND-was-treated-as-IDR bug.
+    // Default: all live feeds fail. Tests rely on the hardcoded fallback table.
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline") }))
   })
 
@@ -22,25 +21,25 @@ describe("fx-rates.convert", () => {
     expect(r.exchangeRate).toBe(1)
   })
 
-  it("VND → IDR uses fallback rate (~0.65), not 1:1", async () => {
+  it("VND → IDR uses fallback rate (~0.67), not 1:1", async () => {
     const { convert } = await loadModule()
     const r = await convert(442_743, "VND", "IDR")
-    // 442743 × 0.65 ≈ 287,783
-    expect(r.amountBase).toBe(Math.round(442_743 * 0.65))
-    expect(r.exchangeRate).toBeCloseTo(0.65, 2)
+    // 442743 × 0.67 ≈ 287,637
+    expect(r.amountBase).toBe(Math.round(442_743 * 0.67))
+    expect(r.exchangeRate).toBeCloseTo(0.67, 2)
   })
 
-  it("USD → IDR uses fallback ~16,200", async () => {
+  it("USD → IDR uses fallback ~17,556", async () => {
     const { convert } = await loadModule()
     const r = await convert(50, "USD", "IDR")
-    expect(r.amountBase).toBe(50 * 16200)
-    expect(r.exchangeRate).toBeCloseTo(16200, 0)
+    expect(r.amountBase).toBe(50 * 17556)
+    expect(r.exchangeRate).toBeCloseTo(17556, 0)
   })
 
   it("IDR → USD uses inverse fallback rate", async () => {
     const { convert } = await loadModule()
-    const r = await convert(810_000, "IDR", "USD")
-    // 810000 / 16200 = 50.00
+    const r = await convert(877_800, "IDR", "USD")
+    // 877800 / 17556 = 50.00
     expect(r.amountBase).toBeCloseTo(50, 1)
   })
 
@@ -53,7 +52,6 @@ describe("fx-rates.convert", () => {
   it("rounds to 2 decimals for normal target currencies", async () => {
     const { convert } = await loadModule()
     const r = await convert(100, "JPY", "USD")
-    // r.amountBase will be a small number; just verify ≤ 2 decimals
     const decimals = (String(r.amountBase).split(".")[1] ?? "").length
     expect(decimals).toBeLessThanOrEqual(2)
   })
@@ -67,37 +65,71 @@ describe("fx-rates.convert", () => {
     warn.mockRestore()
   })
 
-  it("uses live rates when fetch returns valid data", async () => {
+  it("uses live rates from open.er-api.com when available", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.includes("exchangerate.host")) {
+      if (url.includes("open.er-api.com")) {
         return {
           ok: true,
-          json: async () => ({ rates: { USD: 0.0001, VND: 0.0015 } }),
+          json: async () => ({
+            result: "success",
+            base_code: "USD",
+            rates: { USD: 1, IDR: 17500, VND: 26000, SGD: 1.28 },
+          }),
         }
       }
       throw new Error("offline")
     }))
     const { convert } = await loadModule()
     const r = await convert(100, "USD", "IDR")
-    // 1 USD = 1 / 0.0001 = 10,000 IDR
-    expect(r.amountBase).toBe(100 * 10_000)
+    expect(r.amountBase).toBe(100 * 17500)
   })
 
-  it("layers live rates on top of fallbacks (VND missing from feed still works)", async () => {
-    // exchangerate.host returns USD but NOT VND.
+  it("uses fawazahmed0 CDN when open.er-api fails (covers VND)", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.includes("exchangerate.host")) {
+      if (url.includes("open.er-api.com")) throw new Error("offline")
+      if (url.includes("fawazahmed0")) {
         return {
           ok: true,
-          json: async () => ({ rates: { USD: 0.0001 } }),
+          json: async () => ({
+            date: "2026-05-18",
+            usd: { idr: 17500, vnd: 26000, sgd: 1.28 },
+          }),
         }
       }
       throw new Error("offline")
     }))
     const { convert } = await loadModule()
+    const r = await convert(26000, "VND", "IDR")
+    // 1 VND = 17500/26000 IDR ≈ 0.6731
+    expect(r.amountBase).toBeCloseTo(17500, -2)
+  })
+
+  it("falls through to frankfurter when first two sources fail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("open.er-api.com")) throw new Error("offline")
+      if (url.includes("fawazahmed0")) throw new Error("offline")
+      if (url.includes("frankfurter.app")) {
+        return {
+          ok: true,
+          json: async () => ({
+            base: "USD",
+            rates: { IDR: 17500, SGD: 1.28, EUR: 0.91 },
+          }),
+        }
+      }
+      throw new Error("offline")
+    }))
+    const { convert } = await loadModule()
+    const r = await convert(100, "USD", "IDR")
+    expect(r.amountBase).toBe(100 * 17500)
+  })
+
+  it("VND falls to hardcoded fallback when frankfurter lacks it (all live fail)", async () => {
+    // All sources fail
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline") }))
+    const { convert } = await loadModule()
     const r = await convert(442_743, "VND", "IDR")
-    // VND falls back to ~0.65 even though USD comes from the live feed.
     expect(r.amountBase).toBeGreaterThan(0)
-    expect(r.exchangeRate).toBeCloseTo(0.65, 2)
+    expect(r.exchangeRate).toBeCloseTo(0.67, 2)
   })
 })

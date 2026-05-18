@@ -186,6 +186,7 @@ export default function EmployeePerDiemPage() {
   const [rates, setRates] = useState<RateTable>({})
   const [requests, setRequests] = useState<PerDiemRequest[]>([])
   const [residenceCurrency, setResidenceCurrency] = useState("IDR")
+  const [usdToBase, setUsdToBase] = useState(1)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
 
@@ -199,7 +200,14 @@ export default function EmployeePerDiemPage() {
     setRates(r.rates ?? {})
     setRequests(list.requests ?? [])
     const cur = profile?.profile?.defaultCurrency
-    if (typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) setResidenceCurrency(cur)
+    const baseCur = (typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) ? cur : "IDR"
+    setResidenceCurrency(baseCur)
+    if (baseCur !== "USD") {
+      fetch(`/api/fx/convert?from=USD&to=${baseCur}&amount=1`)
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data?.exchangeRate) setUsdToBase(Number(data.exchangeRate)) })
+        .catch(() => {})
+    }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -264,8 +272,8 @@ export default function EmployeePerDiemPage() {
                     {r.currency} {formatLocal(Number(r.totalAmount), r.currency)}
                     {/* USD reference only useful when the claim isn't in
                         the residence currency — drop it otherwise. */}
-                    {r.currency !== "USD" && r.currency !== residenceCurrency && (
-                      <div className="text-[10px] font-normal text-gray-500">≈ USD {Number(r.totalAmountUSD).toFixed(2)}</div>
+                    {r.currency !== residenceCurrency && (
+                      <div className="text-[10px] font-normal text-gray-500">≈ {residenceCurrency} {formatLocal(Number(r.totalAmountUSD) * usdToBase, residenceCurrency)}</div>
                     )}
                     {(r.payoutCurrency || r.payoutAccountNumber || r.payoutSwiftCode) && (
                       <div className="mt-0.5 text-[10px] font-normal text-blue-700">

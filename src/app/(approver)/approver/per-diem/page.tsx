@@ -98,11 +98,25 @@ export default function ApproverPerDiemPage() {
   const [tab, setTab] = useState<"pending" | "all">("pending")
   const [rejectFor, setRejectFor] = useState<PerDiemRequest | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [orgCurrency, setOrgCurrency] = useState("IDR")
+  const [usdToOrg, setUsdToOrg] = useState(1)
 
   async function load() {
     setLoading(true)
-    const data = await fetch("/api/per-diem/request?scope=to-approve").then((r) => r.json())
+    const [data, profile] = await Promise.all([
+      fetch("/api/per-diem/request?scope=to-approve").then((r) => r.json()),
+      fetch("/api/profile/preferences").then((r) => r.ok ? r.json() : null).catch(() => null),
+    ])
     setRequests(data.requests ?? [])
+    const cur = profile?.profile?.defaultCurrency
+    const baseCur = (typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) ? cur : "IDR"
+    setOrgCurrency(baseCur)
+    if (baseCur !== "USD") {
+      fetch(`/api/fx/convert?from=USD&to=${baseCur}&amount=1`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (data?.exchangeRate) setUsdToOrg(Number(data.exchangeRate)) })
+        .catch(() => {})
+    }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -171,8 +185,8 @@ export default function ApproverPerDiemPage() {
                     <div className="text-sm text-gray-700">
                       {fmtDate(r.startDate)} → {fmtDate(r.endDate)} · {r.totalDays} day{r.totalDays === 1 ? "" : "s"} ·{" "}
                       <strong>{r.currency} {Number(r.totalAmount).toFixed(2)}</strong>
-                      {r.currency !== "USD" && (
-                        <span className="ml-1 text-xs text-gray-500">(≈ USD {Number(r.totalAmountUSD).toFixed(2)})</span>
+                      {r.currency !== orgCurrency && (
+                        <span className="ml-1 text-xs text-gray-500">(≈ {orgCurrency} {Number((Number(r.totalAmountUSD) * usdToOrg).toFixed(0)).toLocaleString()})</span>
                       )}
                     </div>
                     {r.reason && <div className="text-sm text-gray-600 italic">“{r.reason}”</div>}
