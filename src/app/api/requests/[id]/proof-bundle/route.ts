@@ -19,7 +19,7 @@ export async function GET(
   const request = await prisma.reimbursementRequest.findUnique({
     where: { id },
     include: {
-      employee: { select: { id: true, name: true, email: true, department: true } },
+      employee: { select: { id: true, name: true, email: true, department: true, organizationId: true } },
       approvalSteps: {
         include: { approver: { select: { id: true, name: true, email: true } } },
         orderBy: { order: "asc" },
@@ -31,13 +31,19 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  // Access control: finance, admin, or the employee who owns the request
+  // Access control: finance, admin, or the employee who owns the request — org-scoped
   const role = session.user.role
+  const isSuperAdmin = role === "SUPER_ADMIN"
+  const sameOrg = !session.user.organizationId || request.employee.organizationId === session.user.organizationId
   if (
+    !isSuperAdmin &&
     role !== "FINANCE" &&
     role !== "ADMIN" &&
     !(role === "EMPLOYEE" && request.employeeId === session.user.id)
   ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  if (!isSuperAdmin && !sameOrg) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 

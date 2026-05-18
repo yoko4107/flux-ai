@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit"
 import { sendNotification } from "@/lib/notifications"
 import { writeFile, mkdir } from "fs/promises"
 import path from "path"
+import { randomBytes } from "crypto"
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
 const MAX_SIZE = 10 * 1024 * 1024
@@ -63,7 +64,7 @@ export async function PATCH(
 
     const rawExt = proofFile.name.split(".").pop() ?? "bin"
     const ext = rawExt.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10)
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const filename = `${randomBytes(16).toString("hex")}.${ext}`
 
     if (!useFallback) {
       const { put } = await import("@vercel/blob")

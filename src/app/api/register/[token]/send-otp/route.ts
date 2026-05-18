@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server"
+import { randomInt } from "node:crypto"
 import { prisma } from "@/lib/prisma"
+import { rateLimit } from "@/lib/rate-limit"
 
 function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString()
+  return randomInt(100000, 1000000).toString()
 }
 
 export async function POST(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
+
+  if (!rateLimit(`send-otp:${token}`, 5, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
+
   const invitation = await prisma.userInvitation.findUnique({ where: { token } })
 
   if (!invitation || invitation.status !== "PENDING" || invitation.expiresAt < new Date()) {
@@ -21,10 +28,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ to
     data: { otp, otpExpiresAt },
   })
 
-  // In dev mode we return the OTP so the UI can display it
-  return NextResponse.json({
-    ok: true,
-    devOtp: process.env.NODE_ENV === "development" ? otp : undefined,
-    message: `OTP sent to ${invitation.email}`
-  })
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[DEV] OTP for token ${token}: ${otp}`)
+  }
+
+  return NextResponse.json({ ok: true, message: `OTP sent to ${invitation.email}` })
 }

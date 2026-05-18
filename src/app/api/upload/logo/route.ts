@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 
-const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"]
+const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 const MAX_BYTES = 2 * 1024 * 1024 // 2 MB
 
 export async function POST(request: Request) {
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     const file = formData.get("file") as File | null
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 })
     if (!ALLOWED.includes(file.type)) {
-      return NextResponse.json({ error: "Only PNG, JPEG, WebP, or SVG logos are allowed" }, { status: 400 })
+      return NextResponse.json({ error: "Only PNG, JPEG, WebP, or GIF logos are allowed" }, { status: 400 })
     }
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: "Logo must be under 2 MB" }, { status: 400 })

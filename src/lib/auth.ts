@@ -5,6 +5,9 @@ import Credentials from "next-auth/providers/credentials"
 import { prisma } from "@/lib/prisma"
 import type { Role } from "@/generated/prisma"
 
+// How long (in ms) before we re-query the DB to refresh role/orgId in JWT
+const JWT_ROLE_REFRESH_INTERVAL_MS = 60 * 1000
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma as any),
   providers: [
@@ -12,28 +15,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    Credentials({
-      name: "Credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email) return null
-        // In dev: allow any email from the seeded users
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-        })
-        if (!user) return null
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          department: user.department,
-        }
-      },
-    }),
+    // Dev-only: passwordless login via seeded users.
+    // NEVER enabled in production — no password check is performed.
+    ...(process.env.NODE_ENV === "development"
+      ? [
+          Credentials({
+            name: "Credentials",
+            credentials: {
+              email: { label: "Email", type: "email" },
+            },
+            async authorize(credentials) {
+              if (!credentials?.email) return null
+              const user = await prisma.user.findUnique({
+                where: { email: credentials.email as string },
+              })
+              if (!user) return null
+              return {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                department: user.department,
+              }
+            },
+          }),
+        ]
+      : []),
   ],
   session: {
     strategy: "jwt",
@@ -41,6 +48,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        // Initial sign-in: populate token from DB
         const dbUser = await prisma.user.findUnique({
           where: { email: user.email! },
         })
@@ -49,6 +57,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.id = dbUser.id
           token.department = dbUser.department ?? undefined
           token.organizationId = dbUser.organizationId ?? undefined
+          token.lastRefreshed = Date.now()
+        }
+      } else {
+        // Subsequent requests: refresh role+orgId from DB at most every 60 s
+        const lastRefreshed = (token.lastRefreshed as number | undefined) ?? 0
+        if (Date.now() - lastRefreshed > JWT_ROLE_REFRESH_INTERVAL_MS && token.sub) {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.sub },
+            select: { role: true, organizationId: true },
+          })
+          if (dbUser) {
+            token.role = dbUser.role
+            token.organizationId = dbUser.organizationId ?? undefined
+            token.lastRefreshed = Date.now()
+          }
         }
       }
       return token

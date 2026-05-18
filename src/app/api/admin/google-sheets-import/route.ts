@@ -82,6 +82,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not parse Google Sheets URL. Make sure the spreadsheet is publicly accessible." }, { status: 400 })
   }
 
+  const parsedUrl = new URL(exportUrl)
+  if (parsedUrl.hostname !== "docs.google.com") {
+    return NextResponse.json({ error: "Invalid URL" }, { status: 400 })
+  }
+  if (!exportUrl.startsWith("https://docs.google.com/spreadsheets/")) {
+    return NextResponse.json({ error: "Invalid URL" }, { status: 400 })
+  }
+
   let csvText: string
   try {
     const res = await fetch(exportUrl, {

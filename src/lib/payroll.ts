@@ -190,6 +190,75 @@ export function computeBracketTax(taxable: number, brackets: Bracket[]): number 
 }
 
 /**
+ * Safe recursive-descent arithmetic evaluator.
+ *
+ * Parses and evaluates expressions containing only:
+ *   numeric literals, +, -, *, /, (, ), whitespace.
+ *
+ * Has zero access to the JavaScript execution context — no eval, no Function().
+ * Throws on any unexpected token so callers can catch and return 0.
+ *
+ * Grammar:
+ *   expr   = term (('+' | '-') term)*
+ *   term   = factor (('*' | '/') factor)*
+ *   factor = '(' expr ')' | ('+' | '-') factor | number
+ *   number = [0-9]+ ('.' [0-9]+)?
+ */
+function safeEvalArithmetic(expr: string): number {
+  let pos = 0
+  const s = expr.replace(/\s+/g, "")
+
+  function peek(): string { return s[pos] ?? "" }
+  function consume(ch: string): void {
+    if (s[pos] !== ch) throw new Error(`Expected '${ch}' at ${pos}`)
+    pos++
+  }
+
+  function parseNumber(): number {
+    const start = pos
+    while (pos < s.length && /[0-9.]/.test(s[pos])) pos++
+    if (pos === start) throw new Error(`Expected number at ${pos}`)
+    return Number(s.slice(start, pos))
+  }
+
+  function parseFactor(): number {
+    if (peek() === "(") {
+      consume("(")
+      const v = parseExpr()
+      consume(")")
+      return v
+    }
+    if (peek() === "-") { pos++; return -parseFactor() }
+    if (peek() === "+") { pos++; return parseFactor() }
+    return parseNumber()
+  }
+
+  function parseTerm(): number {
+    let v = parseFactor()
+    while (peek() === "*" || peek() === "/") {
+      const op = s[pos++]
+      const r = parseFactor()
+      v = op === "*" ? v * r : v / r
+    }
+    return v
+  }
+
+  function parseExpr(): number {
+    let v = parseTerm()
+    while (peek() === "+" || peek() === "-") {
+      const op = s[pos++]
+      const r = parseTerm()
+      v = op === "+" ? v + r : v - r
+    }
+    return v
+  }
+
+  const result = parseExpr()
+  if (pos !== s.length) throw new Error(`Unexpected character '${peek()}' at ${pos}`)
+  return result
+}
+
+/**
  * Very small formula evaluator. Supports:
  *   - identifiers: BASE, GROSS, TAXABLE, and any componentCode already
  *     computed (case-sensitive).
@@ -222,9 +291,8 @@ export function evaluateFormula(
   // After substitution only digits / operators / parens / whitespace must remain.
   if (!/^[0-9+\-*/().\s]+$/.test(replaced)) return 0
   try {
-    // Function constructor in a constrained alphabet is acceptable for an
-    // admin-typed expression that has already been character-class filtered.
-    const result = Function(`"use strict"; return (${replaced})`)() as number
+    // Use a safe recursive-descent parser — no JS execution context access.
+    const result = safeEvalArithmetic(replaced)
     if (!Number.isFinite(result)) return 0
     return Math.round(result * 100) // back to minor units
   } catch {

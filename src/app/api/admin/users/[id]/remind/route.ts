@@ -32,11 +32,17 @@ export async function POST(
     data: { status: "EXPIRED" },
   })
 
+  const allowedRoles = ["EMPLOYEE", "APPROVER", "FINANCE", "ADMIN"] as const
+  type AllowedRole = typeof allowedRoles[number]
+  const safeRole: AllowedRole = allowedRoles.includes(user.role as AllowedRole)
+    ? (user.role as AllowedRole)
+    : "EMPLOYEE"
+
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   const invitation = await prisma.userInvitation.create({
     data: {
       email: user.email,
-      role: user.role as "EMPLOYEE" | "APPROVER" | "FINANCE" | "ADMIN",
+      role: safeRole,
       orgId: user.organizationId ?? undefined,
       costCenterId: user.costCenterId ?? undefined,
       invitedById: session.user.id,

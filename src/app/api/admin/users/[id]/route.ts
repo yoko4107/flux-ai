@@ -106,6 +106,11 @@ export async function PATCH(
   const { name, role, status, department, hireDate, managerId, organizationId, costCenterId,
           jobTitle, employmentType, workArrangement, phone, employmentStartDate, employmentEndDate } = parsed.data
 
+  // Block ADMIN from escalating any user (including themselves) to SUPER_ADMIN
+  if (role === "SUPER_ADMIN" && session.user.role !== "SUPER_ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   // If the caller is trying to assign a cost center, make sure it belongs
   // to the target user's org (or the caller's org for non-super-admins).
   if (costCenterId) {

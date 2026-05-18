@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { writeFile, mkdir } from "fs/promises"
 import path from "path"
+import { randomBytes } from "crypto"
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
 const MAX_SIZE = 10 * 1024 * 1024 // 10MB
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const rawExt = file.name.split(".").pop() ?? "bin"
   const ext = rawExt.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10)
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const filename = `${randomBytes(16).toString("hex")}.${ext}`
 
   if (!useFallback) {
     // Use Vercel Blob

@@ -67,7 +67,7 @@ export async function PATCH(
   const request = await prisma.reimbursementRequest.findUnique({
     where: { id },
     include: {
-      employee: { select: { id: true, name: true, email: true } },
+      employee: { select: { id: true, name: true, email: true, organizationId: true } },
       approvalSteps: {
         include: { approver: { select: { id: true, name: true, email: true } } },
         orderBy: { order: "asc" },
@@ -77,6 +77,11 @@ export async function PATCH(
 
   if (!request) {
     return NextResponse.json({ error: "Request not found" }, { status: 404 })
+  }
+
+  // Org scoping: prevent cross-org approval
+  if (session.user.role !== "SUPER_ADMIN" && request.employee.organizationId !== session.user.organizationId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   if (allApproved) {

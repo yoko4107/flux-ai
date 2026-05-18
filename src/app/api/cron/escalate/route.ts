@@ -17,8 +17,8 @@ function addBusinessDays(date: Date, days: number): Date {
 }
 
 export async function GET(req: NextRequest) {
-  const cronSecret = req.headers.get("x-cron-secret")
-  if (!cronSecret || cronSecret !== process.env.CRON_SECRET) {
+  const authHeader = req.headers.get("authorization")
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

@@ -47,7 +47,15 @@ export async function PATCH(
     data: { status: "REJECTED" },
   })
 
-  const request = await prisma.reimbursementRequest.findUnique({ where: { id } })
+  const request = await prisma.reimbursementRequest.findUnique({
+    where: { id },
+    include: { employee: { select: { organizationId: true } } },
+  })
+
+  // Org scoping: prevent cross-org rejection
+  if (request && session.user.role !== "SUPER_ADMIN" && request.employee.organizationId !== session.user.organizationId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
 
   if (request) {
     await sendNotification({

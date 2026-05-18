@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     })
     const baseUrl = (process.env.NEXTAUTH_URL ?? process.env.APP_BASE_URL ?? "http://localhost:3000").replace(/\/$/, "")
     const registrationLink = `${baseUrl}/register/${invitation.token}`
-    results.push({ email: invite.email, status: "invited", token: invitation.token, link: registrationLink })
+    results.push({ email: invite.email, status: "invited", link: registrationLink })
   }
 
   return NextResponse.json({ results })
