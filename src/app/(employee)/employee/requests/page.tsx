@@ -1107,10 +1107,8 @@ function perDiemFormatAmount(amount: number, currency: string): string {
 function PerDiemSection() {
   const [rows, setRows] = useState<PerDiemRow[]>([])
   const [loading, setLoading] = useState(true)
-  // Residence currency = UserProfile.defaultCurrency (falls back to IDR
-  // for this org). Used to decide whether the USD reference line is worth
-  // showing — when the claim currency matches residence, it's just noise.
   const [residenceCurrency, setResidenceCurrency] = useState("IDR")
+  const [usdToBase, setUsdToBase] = useState(1)
 
   useEffect(() => {
     let cancelled = false
@@ -1121,7 +1119,14 @@ function PerDiemSection() {
       if (cancelled) return
       setRows(d.requests ?? [])
       const cur = p?.profile?.defaultCurrency
-      if (typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) setResidenceCurrency(cur)
+      const baseCur = (typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) ? cur : "IDR"
+      setResidenceCurrency(baseCur)
+      if (baseCur !== "USD") {
+        fetch(`/api/fx/convert?from=USD&to=${baseCur}&amount=1`)
+          .then((r) => r.ok ? r.json() : null)
+          .then((data) => { if (!cancelled && data?.exchangeRate) setUsdToBase(Number(data.exchangeRate)) })
+          .catch(() => {})
+      }
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
@@ -1177,8 +1182,8 @@ function PerDiemSection() {
                   {/* Skip the USD reference when the claim is already in
                       the user's residence currency — that's the common case
                       and the second line is just visual noise. */}
-                  {r.currency !== "USD" && r.currency !== residenceCurrency && (
-                    <div className="text-[10px] font-normal text-gray-500">≈ USD {Number(r.totalAmountUSD).toFixed(2)}</div>
+                  {r.currency !== residenceCurrency && (
+                    <div className="text-[10px] font-normal text-gray-500">≈ {residenceCurrency} {perDiemFormatAmount(Number(r.totalAmountUSD) * usdToBase, residenceCurrency)}</div>
                   )}
                 </td>
                 <td className="px-5 py-2.5">
