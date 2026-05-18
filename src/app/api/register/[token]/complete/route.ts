@@ -55,7 +55,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   // Auto-create Drive folder if org has Drive connected
   if (invitation.orgId) {
-    createEmployeeFolder(invitation.orgId, user.id, user.name ?? user.email ?? user.id).catch(() => {
+    createEmployeeFolder(invitation.orgId, user.id, user.name ?? user.email ?? user.id, user.email ?? undefined).catch(() => {
       // Non-fatal: folder can be created manually from admin panel
     })
   }

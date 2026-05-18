@@ -123,7 +123,8 @@ const EMPLOYEE_SUBFOLDERS = ["CV", "Employee Contract", "Annual Tax Deduction", 
 export async function createEmployeeFolder(
   orgId: string,
   userId: string,
-  employeeName: string
+  employeeName: string,
+  employeeEmail?: string
 ): Promise<string> {
   const rootFolderId = await ensureOrgRootFolder(orgId)
   const drive = await getDriveClient(orgId)
@@ -150,6 +151,19 @@ export async function createEmployeeFolder(
       })
     )
   )
+
+  // Share folder with the employee so they can view and upload their own documents
+  if (employeeEmail) {
+    await drive.permissions.create({
+      fileId: employeeFolderId,
+      sendNotificationEmail: true,
+      requestBody: {
+        role: "writer",
+        type: "user",
+        emailAddress: employeeEmail,
+      },
+    })
+  }
 
   await prisma.user.update({
     where: { id: userId },
