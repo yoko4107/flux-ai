@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Loader2, Plus, Save, Trash2, Building2, Users as UsersIcon,
-  Power, UserPlus, X, ChevronDown, ChevronRight, FolderOpen, HardDrive,
+  Power, UserPlus, X, ChevronDown, ChevronRight, FolderOpen, HardDrive, Bell,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -261,6 +261,9 @@ function CostCenterCard({
   const [editMember, setEditMember] = useState<UserRow | null>(null)
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
   const [userToDelete, setUserToDelete] = useState<UserRow | null>(null)
+  const [creatingFolderFor, setCreatingFolderFor] = useState<string | null>(null)
+  const [remindingFor, setRemindingFor] = useState<string | null>(null)
+  const [localFolderIds, setLocalFolderIds] = useState<Record<string, string>>({})
 
   async function deleteUser(u: UserRow) {
     setUserToDelete(null)
@@ -275,6 +278,39 @@ function CostCenterCard({
       }
     } finally {
       setDeletingUser(null)
+    }
+  }
+
+  async function createDriveFolderForUser(u: UserRow) {
+    setCreatingFolderFor(u.id)
+    try {
+      const res = await fetch(`/api/admin/google-drive/employee/${u.id}`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to create Drive folder")
+      } else {
+        setLocalFolderIds((prev) => ({ ...prev, [u.id]: data.folderId }))
+        toast.success("Drive folder created")
+      }
+    } finally {
+      setCreatingFolderFor(null)
+    }
+  }
+
+  async function remindUser(u: UserRow) {
+    setRemindingFor(u.id)
+    try {
+      const res = await fetch(`/api/admin/users/${u.id}/remind`, { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to send reminder")
+      } else {
+        toast.success(`Reminder sent to ${u.email}`, {
+          description: "A new registration link has been generated.",
+        })
+      }
+    } finally {
+      setRemindingFor(null)
     }
   }
 
@@ -429,9 +465,19 @@ function CostCenterCard({
                             </td>
                             <td className="px-4 py-2.5 text-right">
                               <div className="flex items-center justify-end gap-1.5">
-                                {u.driveFolderId ? (
+                                {u.status === "PENDING" && (
+                                  <button
+                                    onClick={() => remindUser(u)}
+                                    disabled={remindingFor === u.id}
+                                    className="rounded p-1.5 text-amber-500 border border-amber-200 hover:bg-amber-50 disabled:opacity-50"
+                                    title="Send registration reminder"
+                                  >
+                                    {remindingFor === u.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bell className="h-3 w-3" />}
+                                  </button>
+                                )}
+                                {(localFolderIds[u.id] ?? u.driveFolderId) ? (
                                   <a
-                                    href={`https://drive.google.com/drive/folders/${u.driveFolderId}`}
+                                    href={`https://drive.google.com/drive/folders/${localFolderIds[u.id] ?? u.driveFolderId}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="rounded p-1.5 text-green-600 border border-green-200 hover:bg-green-50"
@@ -439,6 +485,15 @@ function CostCenterCard({
                                   >
                                     <FolderOpen className="h-3 w-3" />
                                   </a>
+                                ) : driveConnected ? (
+                                  <button
+                                    onClick={() => createDriveFolderForUser(u)}
+                                    disabled={creatingFolderFor === u.id}
+                                    className="rounded p-1.5 text-blue-500 border border-blue-200 hover:bg-blue-50 disabled:opacity-50"
+                                    title="Create Drive folder for this employee"
+                                  >
+                                    {creatingFolderFor === u.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <HardDrive className="h-3 w-3" />}
+                                  </button>
                                 ) : null}
                                 <button
                                   onClick={() => setEditMember(u)}
