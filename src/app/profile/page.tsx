@@ -257,11 +257,11 @@ export default function ProfilePage() {
                 : "—"
             }
           />
-          {profile.driveFolderId && (
-            <div className="flex items-start gap-2">
-              <FolderOpen className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-              <div>
-                <div className="text-xs text-gray-500">Documents</div>
+          <div className="flex items-start gap-2">
+            <FolderOpen className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+            <div>
+              <div className="text-xs text-gray-500">Documents</div>
+              {profile.driveFolderId ? (
                 <a
                   href={`https://drive.google.com/drive/folders/${profile.driveFolderId}`}
                   target="_blank"
@@ -270,9 +270,11 @@ export default function ProfilePage() {
                 >
                   Open in Drive
                 </a>
-              </div>
+              ) : (
+                <span className="text-sm text-gray-400">Not set up yet</span>
+              )}
             </div>
-          )}
+          </div>
           {/* Social links (read-only display in card) */}
           {socials.length > 0 && (
             <div className="sm:col-span-2 flex flex-wrap gap-3 pt-1">
