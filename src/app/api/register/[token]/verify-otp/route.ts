@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/rate-limit"
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
 
-  if (!rateLimit(`verify-otp:${token}`, 10, 15 * 60 * 1000)) {
+  if (!await rateLimit(`verify-otp:${token}`, 10, 15 * 60 * 1000)) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 })
   }
 

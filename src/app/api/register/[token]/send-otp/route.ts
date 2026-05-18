@@ -10,7 +10,7 @@ function generateOtp() {
 export async function POST(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
 
-  if (!rateLimit(`send-otp:${token}`, 5, 15 * 60 * 1000)) {
+  if (!await rateLimit(`send-otp:${token}`, 5, 15 * 60 * 1000)) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 })
   }
 

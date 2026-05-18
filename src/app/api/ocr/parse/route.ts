@@ -363,7 +363,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (!rateLimit(`ocr:${session.user.id}`, 10, 60000)) {
+  if (!await rateLimit(`ocr:${session.user.id}`, 10, 60000)) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 })
   }
 
