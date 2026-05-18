@@ -33,7 +33,7 @@ export async function POST(
   }
 
   try {
-    const folderId = await createEmployeeFolder(orgId, userId, user.name ?? user.email ?? userId)
+    const folderId = await createEmployeeFolder(orgId, userId, user.name ?? user.email ?? userId, user.email ?? undefined)
     return NextResponse.json({ folderId, folderUrl: driveFolderUrl(folderId) })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error"
