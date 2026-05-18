@@ -25,7 +25,7 @@ export async function GET() {
       notificationPrefs: true,
       organization: { select: { id: true, name: true, slug: true } },
       manager: { select: { id: true, name: true, email: true } },
-      profile: { select: { jobTitle: true, employmentStartDate: true, emergencyContact: true, socialLinks: true } },
+      profile: { select: { jobTitle: true, employmentType: true, workArrangement: true, employmentStartDate: true, emergencyContact: true, socialLinks: true } },
     },
   })
   if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 })

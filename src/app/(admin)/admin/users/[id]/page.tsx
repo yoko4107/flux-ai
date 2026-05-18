@@ -33,6 +33,8 @@ type UserDetail = {
   costCenter: { id: string; code: string; name: string; currency: string } | null
   profile: {
     jobTitle: string | null
+    employmentType: string | null
+    workArrangement: string | null
     employmentStartDate: string | null
     employmentEndDate: string | null
     emergencyContact: EmergencyContact | null
@@ -53,6 +55,19 @@ const STATUS_COLORS: Record<string, string> = {
   ACTIVE: "bg-emerald-100 text-emerald-800",
   INACTIVE: "bg-gray-100 text-gray-500",
   PENDING: "bg-amber-100 text-amber-800",
+}
+
+const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
+  FULL_TIME: "Full-time",
+  PART_TIME: "Part-time",
+  CONTRACT: "Contractor",
+  INTERN: "Intern",
+}
+
+const WORK_ARRANGEMENT_LABELS: Record<string, string> = {
+  REMOTE: "Remote",
+  HYBRID: "Hybrid",
+  ON_SITE: "On-site",
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -213,7 +228,23 @@ export default function AdminUserDetailPage() {
             <Briefcase className="h-4 w-4 text-gray-500" /> Employment
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 text-sm">
+        <CardContent className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-gray-400">Job title</p>
+            <p className="font-medium">{user.profile?.jobTitle ?? "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Employment type</p>
+            <p className="font-medium">{user.profile?.employmentType ? EMPLOYMENT_TYPE_LABELS[user.profile.employmentType] ?? user.profile.employmentType : "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Work arrangement</p>
+            <p className="font-medium">{user.profile?.workArrangement ? WORK_ARRANGEMENT_LABELS[user.profile.workArrangement] ?? user.profile.workArrangement : "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">Hire date</p>
+            <p className="font-medium">{fmt(user.hireDate)}</p>
+          </div>
           <div>
             <p className="text-xs text-gray-400">Start date</p>
             <p className="font-medium">{fmt(user.profile?.employmentStartDate ?? null)}</p>

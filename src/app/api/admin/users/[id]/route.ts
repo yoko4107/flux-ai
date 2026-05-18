@@ -29,7 +29,8 @@ export async function GET(
       costCenter: { select: { id: true, code: true, name: true, currency: true } },
       profile: {
         select: {
-          jobTitle: true, employmentStartDate: true, employmentEndDate: true,
+          jobTitle: true, employmentType: true, workArrangement: true,
+          employmentStartDate: true, employmentEndDate: true,
           emergencyContact: true, socialLinks: true,
         },
       },
@@ -56,9 +57,11 @@ const patchUserSchema = z.object({
   costCenterId: z.string().nullable().optional(),
   // HR profile fields — stored on UserProfile (upserted if missing)
   jobTitle: z.string().nullable().optional(),
+  employmentType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "INTERN"]).nullable().optional(),
+  workArrangement: z.enum(["REMOTE", "HYBRID", "ON_SITE"]).nullable().optional(),
   phone: z.string().nullable().optional(),
-  employmentStartDate: z.string().nullable().optional(), // ISO date string
-  employmentEndDate: z.string().nullable().optional(),   // ISO date string
+  employmentStartDate: z.string().nullable().optional(),
+  employmentEndDate: z.string().nullable().optional(),
 })
 
 export async function PATCH(
@@ -101,7 +104,7 @@ export async function PATCH(
   }
 
   const { name, role, status, department, hireDate, managerId, organizationId, costCenterId,
-          jobTitle, phone, employmentStartDate, employmentEndDate } = parsed.data
+          jobTitle, employmentType, workArrangement, phone, employmentStartDate, employmentEndDate } = parsed.data
 
   // If the caller is trying to assign a cost center, make sure it belongs
   // to the target user's org (or the caller's org for non-super-admins).
@@ -117,10 +120,13 @@ export async function PATCH(
   }
 
   // Build profile patch if any HR fields were sent
-  const hasProfileUpdate = jobTitle !== undefined || phone !== undefined ||
+  const hasProfileUpdate = jobTitle !== undefined || employmentType !== undefined ||
+    workArrangement !== undefined || phone !== undefined ||
     employmentStartDate !== undefined || employmentEndDate !== undefined
   const profileData = hasProfileUpdate ? {
     ...(jobTitle !== undefined ? { jobTitle } : {}),
+    ...(employmentType !== undefined ? { employmentType } : {}),
+    ...(workArrangement !== undefined ? { workArrangement } : {}),
     ...(phone !== undefined ? { phone } : {}),
     ...(employmentStartDate !== undefined
       ? { employmentStartDate: employmentStartDate ? new Date(employmentStartDate) : null }
@@ -161,7 +167,7 @@ export async function PATCH(
       manager: { select: { name: true } },
       organization: { select: { id: true, name: true } },
       costCenter: { select: { id: true, code: true, name: true, currency: true, countryCode: true } },
-      profile: { select: { jobTitle: true, employmentStartDate: true, employmentEndDate: true, phone: true } },
+      profile: { select: { jobTitle: true, employmentType: true, workArrangement: true, employmentStartDate: true, employmentEndDate: true, phone: true } },
       _count: { select: { requests: true } },
     },
   })
