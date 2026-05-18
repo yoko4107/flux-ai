@@ -143,23 +143,6 @@ export default function CostCentersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {drive.connected ? (
-            <a
-              href={drive.rootFolderUrl ?? "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
-            >
-              <HardDrive className="h-3.5 w-3.5" /> Drive connected
-            </a>
-          ) : (
-            <a
-              href="/api/admin/google-drive/connect"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <HardDrive className="h-3.5 w-3.5" /> Connect Google Drive
-            </a>
-          )}
           <button
             onClick={() => setAdding(true)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B1E3F] px-3 py-2 text-sm font-medium text-white"
@@ -404,6 +387,18 @@ function CostCenterCard({
             {membersOpen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
           </button>
           <div className="flex items-center gap-1.5">
+            {driveConnected ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700">
+                <HardDrive className="h-3 w-3" /> Employee folders active
+              </span>
+            ) : (
+              <a
+                href="/api/admin/google-drive/connect"
+                className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+              >
+                <HardDrive className="h-3 w-3" /> Connect Drive for employee folders
+              </a>
+            )}
             <button
               onClick={() => { setAddingMember(true); setMembersOpen(true) }}
               className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
